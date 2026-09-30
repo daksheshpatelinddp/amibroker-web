@@ -1,0 +1,45 @@
+name: Daily NSE Bhavcopy Ingestion to Cloudflare R2 (Free Tier Optimized)
+
+on:
+  schedule:
+    # Runs at 13:30 UTC (19:00 IST / 7:00 PM IST) Monday to Friday
+    - cron: '30 13 * * 1-5'
+  workflow_dispatch: # Allows manual trigger from GitHub Actions tab
+    inputs:
+      start_date:
+        description: 'Start Date (YYYY-MM-DD) - Leave empty for latest trading day (e.g. 2023-12-01)'
+        required: false
+        default: ''
+      end_date:
+        description: 'End Date (YYYY-MM-DD) - Leave empty for single day (e.g. 2026-09-30)'
+        required: false
+        default: ''
+
+jobs:
+  ingest-and-sync-r2:
+    name: Download Bhavcopy & Sync to R2 (<0.01% Free Tier Quota)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Ingestion Dependencies
+        run: |
+          pip install boto3 requests pandas
+
+      - name: Execute Automated Ingestion & Range Backfill
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+        run: |
+          python scripts/ingest_nse_bhavcopy_r2.py \
+            --start-date "${{ github.event.inputs.start_date }}" \
+            --end-date "${{ github.event.inputs.end_date }}"
