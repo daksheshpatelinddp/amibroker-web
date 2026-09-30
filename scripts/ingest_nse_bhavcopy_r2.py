@@ -1,0 +1,1 @@
+scripts/ingest_nse_bhavcopy_r2.py
