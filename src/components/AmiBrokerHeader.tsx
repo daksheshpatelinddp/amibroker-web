@@ -330,6 +330,10 @@ export const AmiBrokerHeader: React.FC<AmiBrokerHeaderProps> = ({
                 </button>
               </div>
 
+              downloadCompleteProjectZip();
+
+              onOpenUserGuide();
+
               {/* Direct Quick Action: Download Project ZIP & User Manual */}
               <div className="pb-2 space-y-1.5">
                 <button
