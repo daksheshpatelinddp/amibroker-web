@@ -1,0 +1,6 @@
+{
+  "name": "AmiBroker Web - Quantitative Charting, Scanner & Backtester",
+  "description": "Professional AmiBroker-inspired financial charting, technical scanning, portfolio backtesting, and NSE Bhavcopy with corporate action adjustment engine.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
