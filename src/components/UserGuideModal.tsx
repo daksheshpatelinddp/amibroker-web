@@ -35,11 +35,15 @@ import {
   FileText,
   Loader2,
 } from 'lucide-react';
-import {
-  downloadCompleteProjectZip,
-  getAllProjectFiles,
-  ProjectFileEntry,
-} from '../utils/projectZipExporter';
+import JSZip from 'jszip';
+
+export interface ProjectFileEntry {
+  path: string;
+  name: string;
+  folder: string;
+  content: string;
+  description: string;
+}
 
 interface UserGuideModalProps {
   isOpen: boolean;
