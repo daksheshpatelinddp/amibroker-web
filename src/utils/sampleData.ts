@@ -6,11 +6,23 @@ export const STOCK_UNIVERSE: StockMetadata[] = [
   { symbol: 'HDFCBANK', name: 'HDFC Bank Limited', market: 'NSE_FNO', group: 'Nifty 50', sector: 'Financial Services', industry: 'Private Sector Banking', marketCapCr: 1310000, isFnO: true, isFavorite: true },
   { symbol: 'INFY', name: 'Infosys Limited', market: 'NSE_FNO', group: 'Nifty 50', sector: 'Information Technology', industry: 'IT Services & Consulting', marketCapCr: 780000, isFnO: true, isFavorite: false },
   { symbol: 'ICICIBANK', name: 'ICICI Bank Limited', market: 'NSE_FNO', group: 'Nifty 50', sector: 'Financial Services', industry: 'Private Sector Banking', marketCapCr: 890000, isFnO: true, isFavorite: false },
+  { symbol: 'BHARTIARTL', name: 'Bharti Airtel Limited', market: 'NSE_FNO', group: 'Nifty 50', sector: 'Telecommunication', industry: 'Telecom Services', marketCapCr: 940000, isFnO: true, isFavorite: true },
   { symbol: 'TATAMOTORS', name: 'Tata Motors Limited', market: 'NSE_FNO', group: 'Nifty 50', sector: 'Automobile', industry: 'Commercial Vehicles & EVs', marketCapCr: 360000, isFnO: true, isFavorite: true },
   { symbol: 'TATASTEEL', name: 'Tata Steel Limited', market: 'NSE_FNO', group: 'Nifty 50', sector: 'Metals & Mining', industry: 'Steel & Ferro Alloys', marketCapCr: 195000, isFnO: true, isFavorite: false },
   { symbol: 'SBIN', name: 'State Bank of India', market: 'NSE_FNO', group: 'Nifty 50', sector: 'Financial Services', industry: 'Public Sector Banking', marketCapCr: 710000, isFnO: true, isFavorite: false },
   { symbol: 'LT', name: 'Larsen & Toubro Ltd', market: 'NSE_FNO', group: 'Nifty 50', sector: 'Capital Goods', industry: 'EPC Infrastructure & Defense', marketCapCr: 490000, isFnO: true, isFavorite: true },
-  { symbol: 'ITC', name: 'ITC Limited', market: 'NSE_FNO', group: 'Nifty 50', sector: 'FMCG', industry: 'Diversified FMCG, Cigarettes & Paper', marketCapCr: 610000, isFnO: true, isFavorite: false },
+  { symbol: 'ITC', name: 'ITC Limited', market: 'NSE_FNO', group: 'Nifty 50', sector: 'FMCG', industry: 'Diversified FMCG & Cigarettes', marketCapCr: 610000, isFnO: true, isFavorite: false },
+  { symbol: 'HINDUNILVR', name: 'Hindustan Unilever Ltd', market: 'NSE_FNO', group: 'Nifty 50', sector: 'FMCG', industry: 'Household & Personal Products', marketCapCr: 680000, isFnO: true, isFavorite: false },
+  { symbol: 'BAJFINANCE', name: 'Bajaj Finance Limited', market: 'NSE_FNO', group: 'Nifty 50', sector: 'Financial Services', industry: 'NBFC & Consumer Lending', marketCapCr: 440000, isFnO: true, isFavorite: true },
+  { symbol: 'MARUTI', name: 'Maruti Suzuki India Ltd', market: 'NSE_FNO', group: 'Nifty 50', sector: 'Automobile', industry: 'Passenger Cars & Utility Vehicles', marketCapCr: 390000, isFnO: true, isFavorite: false },
+  { symbol: 'SUNPHARMA', name: 'Sun Pharmaceutical Ind', market: 'NSE_FNO', group: 'Nifty 50', sector: 'Healthcare', industry: 'Pharmaceuticals & Generics', marketCapCr: 410000, isFnO: true, isFavorite: false },
+  { symbol: 'AXISBANK', name: 'Axis Bank Limited', market: 'NSE_FNO', group: 'Nifty 50', sector: 'Financial Services', industry: 'Private Sector Banking', marketCapCr: 360000, isFnO: true, isFavorite: false },
+  { symbol: 'KOTAKBANK', name: 'Kotak Mahindra Bank', market: 'NSE_FNO', group: 'Nifty 50', sector: 'Financial Services', industry: 'Private Sector Banking', marketCapCr: 350000, isFnO: true, isFavorite: false },
+  { symbol: 'TITAN', name: 'Titan Company Limited', market: 'NSE_FNO', group: 'Nifty 50', sector: 'Consumer Durables', industry: 'Jewellery & Watches', marketCapCr: 320000, isFnO: true, isFavorite: true },
+  { symbol: 'ADANIENT', name: 'Adani Enterprises Ltd', market: 'NSE_FNO', group: 'Nifty 50', sector: 'Metals & Mining', industry: 'Trading & Conglomerate', marketCapCr: 340000, isFnO: true, isFavorite: false },
+  { symbol: 'NTPC', name: 'NTPC Limited', market: 'NSE_FNO', group: 'Nifty 50', sector: 'Power', industry: 'Thermal & Renewable Power', marketCapCr: 390000, isFnO: true, isFavorite: false },
+  { symbol: 'M&M', name: 'Mahindra & Mahindra Ltd', market: 'NSE_FNO', group: 'Nifty 50', sector: 'Automobile', industry: 'SUVs & Farm Tractors', marketCapCr: 370000, isFnO: true, isFavorite: true },
+  { symbol: 'TRENT', name: 'Trent Limited', market: 'NSE_FNO', group: 'Nifty 50', sector: 'Consumer Services', industry: 'Apparel & Fast Fashion Retail', marketCapCr: 260000, isFnO: true, isFavorite: true },
   { symbol: 'LTIM', name: 'LTIMindtree Limited', market: 'NSE_FNO', group: 'Nifty 50', sector: 'Information Technology', industry: 'IT Solutions & Cloud Services', marketCapCr: 165000, isFnO: true, isFavorite: false },
 ];
 
@@ -103,11 +115,23 @@ export const INITIAL_MARKET_DATA: Record<string, CandleBar[]> = {
   HDFCBANK: generateRealisticNseHistory('HDFCBANK', 1580, 0.017, 0.15),
   INFY: generateRealisticNseHistory('INFY', 1420, 0.02, 0.3),
   ICICIBANK: generateRealisticNseHistory('ICICIBANK', 980, 0.016, 0.45),
+  BHARTIARTL: generateRealisticNseHistory('BHARTIARTL', 1150, 0.017, 0.45),
   TATAMOTORS: generateRealisticNseHistory('TATAMOTORS', 610, 0.024, 0.6),
   TATASTEEL: generateRealisticNseHistory('TATASTEEL', 118, 0.022, 0.2), // post split level
   SBIN: generateRealisticNseHistory('SBIN', 570, 0.019, 0.4),
   LT: generateRealisticNseHistory('LT', 2700, 0.018, 0.5),
   ITC: generateRealisticNseHistory('ITC', 440, 0.014, 0.2),
+  HINDUNILVR: generateRealisticNseHistory('HINDUNILVR', 2350, 0.013, 0.12),
+  BAJFINANCE: generateRealisticNseHistory('BAJFINANCE', 6800, 0.021, 0.35),
+  MARUTI: generateRealisticNseHistory('MARUTI', 11200, 0.018, 0.3),
+  SUNPHARMA: generateRealisticNseHistory('SUNPHARMA', 1450, 0.016, 0.4),
+  AXISBANK: generateRealisticNseHistory('AXISBANK', 1050, 0.018, 0.35),
+  KOTAKBANK: generateRealisticNseHistory('KOTAKBANK', 1720, 0.015, 0.2),
+  TITAN: generateRealisticNseHistory('TITAN', 3250, 0.019, 0.45),
+  ADANIENT: generateRealisticNseHistory('ADANIENT', 2800, 0.028, 0.3),
+  NTPC: generateRealisticNseHistory('NTPC', 340, 0.017, 0.5),
+  'M&M': generateRealisticNseHistory('M&M', 2650, 0.02, 0.55),
+  TRENT: generateRealisticNseHistory('TRENT', 5200, 0.025, 0.7),
   LTIM: generateRealisticNseHistory('LTIM', 4850, 0.022, 0.28),
 };
 
@@ -263,10 +287,68 @@ export function generateFullTwentyYearMarketData(): Record<string, CandleBar[]> 
       { date: '2010-08-03', type: 'BONUS', factor: 0.667 },
       { date: '2016-07-01', type: 'BONUS', factor: 0.5 },
     ]),
+    BHARTIARTL: generateTwentyYearHistory('BHARTIARTL', 65, [
+      { date: '2009-07-23', type: 'SPLIT', factor: 0.5 },
+      { date: '2021-10-18', type: 'RIGHTS', factor: 0.98 },
+    ]),
+    HINDUNILVR: generateTwentyYearHistory('HINDUNILVR', 210),
+    BAJFINANCE: generateTwentyYearHistory('BAJFINANCE', 15, [
+      { date: '2016-09-08', type: 'SPLIT', factor: 0.5 },
+      { date: '2016-09-08', type: 'BONUS', factor: 0.5 },
+    ]),
+    MARUTI: generateTwentyYearHistory('MARUTI', 450),
+    SUNPHARMA: generateTwentyYearHistory('SUNPHARMA', 40, [
+      { date: '2010-11-29', type: 'SPLIT', factor: 0.2 },
+      { date: '2013-07-29', type: 'BONUS', factor: 0.5 },
+    ]),
+    AXISBANK: generateTwentyYearHistory('AXISBANK', 30, [
+      { date: '2014-07-28', type: 'SPLIT', factor: 0.2 },
+    ]),
+    KOTAKBANK: generateTwentyYearHistory('KOTAKBANK', 35, [
+      { date: '2010-09-13', type: 'SPLIT', factor: 0.5 },
+      { date: '2015-07-08', type: 'BONUS', factor: 0.5 },
+    ]),
+    TITAN: generateTwentyYearHistory('TITAN', 12, [
+      { date: '2011-06-23', type: 'SPLIT', factor: 0.1 },
+      { date: '2011-06-23', type: 'BONUS', factor: 0.5 },
+    ]),
+    ADANIENT: generateTwentyYearHistory('ADANIENT', 25, [
+      { date: '2009-09-17', type: 'SPLIT', factor: 0.1 },
+    ]),
+    NTPC: generateTwentyYearHistory('NTPC', 60, [
+      { date: '2019-03-18', type: 'BONUS', factor: 0.8 },
+    ]),
+    'M&M': generateTwentyYearHistory('M&M', 45, [
+      { date: '2010-06-03', type: 'SPLIT', factor: 0.5 },
+      { date: '2017-12-21', type: 'BONUS', factor: 0.5 },
+    ]),
+    TRENT: generateTwentyYearHistory('TRENT', 30, [
+      { date: '2016-09-12', type: 'SPLIT', factor: 0.1 },
+    ]),
     LTIM: generateTwentyYearHistory('LTIM', 380, [
       { date: '2022-11-24', type: 'DEMERGER', factor: 1.0 },
     ]),
   };
+}
+
+/**
+ * Generate historical dataset for all symbols filtered or generated for any custom date range.
+ * Supports arbitrary date intervals, e.g. 2023-12-01 to 2026-09-30 or 2021-01-01 to 2022-12-31.
+ */
+export function generateRangeHistoricalData(
+  startDateStr: string = '2004-01-01',
+  endDateStr: string = '2026-09-30'
+): Record<string, CandleBar[]> {
+  const full = generateFullTwentyYearMarketData();
+  const start = startDateStr.trim() || '2004-01-01';
+  const end = endDateStr.trim() || new Date().toISOString().split('T')[0];
+
+  const ranged: Record<string, CandleBar[]> = {};
+  for (const [sym, bars] of Object.entries(full)) {
+    const subset = bars.filter((b) => b.date >= start && b.date <= end);
+    ranged[sym] = subset.length > 0 ? subset : bars.slice(-250);
+  }
+  return ranged;
 }
 
 /**
