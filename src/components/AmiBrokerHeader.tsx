@@ -142,7 +142,22 @@ export const AmiBrokerHeader: React.FC<AmiBrokerHeaderProps> = ({
                 NSE Equity Universe ({searchResults.length})
               </div>
               {searchResults.length === 0 ? (
-                <div className="px-3 py-2 text-slate-500">No symbol matching &quot;{searchQuery}&quot;</div>
+                <div className="p-2 text-center">
+                  <div className="text-slate-400 text-[10px] mb-1.5">No loaded symbol for &quot;{searchQuery}&quot;</div>
+                  <button
+                    onClick={() => {
+                      const cleanSym = searchQuery.trim().toUpperCase();
+                      if (cleanSym) {
+                        onSelectSymbol(cleanSym);
+                        setIsSearchOpen(false);
+                        setSearchQuery('');
+                      }
+                    }}
+                    className="w-full py-1.5 px-2 rounded bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold text-[11px] shadow transition-all"
+                  >
+                    + Add & Load &quot;{searchQuery.trim().toUpperCase()}&quot; (Full History)
+                  </button>
+                </div>
               ) : (
                 searchResults.map((sym) => {
                   const meta = STOCK_UNIVERSE.find((s) => s.symbol === sym);

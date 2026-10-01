@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { CandleBar } from '../types/market';
+import { CandleBar, StockMetadata } from '../types/market';
 import { parseBhavcopyCsv } from '../utils/bhavcopyParser';
 import {
   appendDailyEodBar,
   generateFullTwentyYearMarketData,
   generateRangeHistoricalData,
   simulateGoogleIntradayStream,
+  STOCK_UNIVERSE,
 } from '../utils/sampleData';
+import { saveR2EndpointUrl, loadR2EndpointUrl } from '../utils/marketStorage';
 import {
   Database,
   Upload,
@@ -29,11 +31,14 @@ import {
   Code2,
   Sliders,
   Sparkles,
+  Cloud,
+  Globe,
+  PlusCircle,
 } from 'lucide-react';
 
 interface BhavcopyDataManagerProps {
   allMarketData: Record<string, CandleBar[]>;
-  onImportBhavcopy: (newData: Record<string, CandleBar[]>) => void;
+  onImportBhavcopy: (newData: Record<string, CandleBar[]>, newMetadata?: StockMetadata[]) => void;
   onResetSampleData: () => void;
 }
 
@@ -51,6 +56,10 @@ export const BhavcopyDataManager: React.FC<BhavcopyDataManagerProps> = ({
   } | null>(null);
 
   const [rawPasteText, setRawPasteText] = useState('');
+
+  // Cloudflare R2 Direct Sync State
+  const [r2Url, setR2Url] = useState<string>(() => loadR2EndpointUrl());
+  const [isR2Syncing, setIsR2Syncing] = useState(false);
 
   // Custom Historical Range Backfill State (User-preferred date range)
   const [backfillStart, setBackfillStart] = useState('2023-12-01');
@@ -116,10 +125,10 @@ export const BhavcopyDataManager: React.FC<BhavcopyDataManagerProps> = ({
 
       const result = parseBhavcopyCsv(text);
       if (result.success) {
-        onImportBhavcopy(result.recordsBySymbol);
+        onImportBhavcopy(result.recordsBySymbol, result.discoveredMetadata);
         setImportStatus({
           success: true,
-          message: `Successfully parsed and loaded ${result.rowsCount} records across ${Object.keys(result.recordsBySymbol).length} symbols!`,
+          message: `Successfully parsed and loaded ${result.rowsCount} records across ${Object.keys(result.recordsBySymbol).length} symbols! All new symbols were automatically registered in your universe.`,
           rows: result.rowsCount,
           symbolsCount: Object.keys(result.recordsBySymbol).length,
         });
@@ -146,10 +155,10 @@ export const BhavcopyDataManager: React.FC<BhavcopyDataManagerProps> = ({
     setIsProcessing(true);
     const result = parseBhavcopyCsv(rawPasteText);
     if (result.success) {
-      onImportBhavcopy(result.recordsBySymbol);
+      onImportBhavcopy(result.recordsBySymbol, result.discoveredMetadata);
       setImportStatus({
         success: true,
-        message: `Imported ${result.rowsCount} records across ${Object.keys(result.recordsBySymbol).length} symbols from pasted CSV!`,
+        message: `Imported ${result.rowsCount} records across ${Object.keys(result.recordsBySymbol).length} symbols from pasted CSV! All new symbols automatically added to universe.`,
       });
       setRawPasteText('');
     } else {
@@ -161,6 +170,106 @@ export const BhavcopyDataManager: React.FC<BhavcopyDataManagerProps> = ({
     setIsProcessing(false);
   };
 
+  // 1-Click Sync from Cloudflare R2 (Browser-side Zero-Bill Fetch)
+  const handleSyncR2 = async () => {
+    let cleanUrl = r2Url.trim();
+    if (!cleanUrl) {
+      setImportStatus({
+        success: false,
+        message: 'Please enter your Cloudflare R2 public bucket URL or custom domain (e.g. https://pub-xxxx.r2.dev or https://bhavcopy.yourdomain.com).',
+      });
+      return;
+    }
+    if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
+      cleanUrl = `https://${cleanUrl}`;
+    }
+    cleanUrl = cleanUrl.replace(/\/+$/, '');
+    saveR2EndpointUrl(cleanUrl);
+
+    setIsR2Syncing(true);
+    setImportStatus(null);
+
+    try {
+      const endpoints = [
+        `${cleanUrl}/data/eod_latest.json.gz`,
+        `${cleanUrl}/data/eod_latest.json`,
+      ];
+
+      let fetchedData: any = null;
+      let usedEndpoint = '';
+
+      for (const ep of endpoints) {
+        try {
+          const res = await fetch(ep, { mode: 'cors' });
+          if (res.ok) {
+            usedEndpoint = ep;
+            if (ep.endsWith('.gz')) {
+              const blob = await res.blob();
+              if (typeof DecompressionStream !== 'undefined') {
+                const ds = new DecompressionStream('gzip');
+                const stream = blob.stream().pipeThrough(ds);
+                const decompressedRes = new Response(stream);
+                fetchedData = await decompressedRes.json();
+              } else {
+                const txt = await blob.text();
+                fetchedData = JSON.parse(txt);
+              }
+            } else {
+              fetchedData = await res.json();
+            }
+            if (fetchedData) break;
+          }
+        } catch (e) {
+          console.warn(`[R2 Sync] Fetch failed for ${ep}:`, e);
+        }
+      }
+
+      if (!fetchedData || typeof fetchedData !== 'object' || Object.keys(fetchedData).length === 0) {
+        throw new Error(
+          `Could not load Bhavcopy from ${cleanUrl}. Check: 1) CORS Policy is enabled in R2 bucket Settings. 2) GitHub Action has uploaded data/eod_latest.json.gz.`
+        );
+      }
+
+      const normalizedRecords: Record<string, CandleBar[]> = {};
+      const newDiscovered: StockMetadata[] = [];
+
+      for (const [sym, barOrBars] of Object.entries(fetchedData)) {
+        const cleanSym = sym.trim().toUpperCase();
+        const barsList: CandleBar[] = Array.isArray(barOrBars) ? (barOrBars as CandleBar[]) : [barOrBars as CandleBar];
+        normalizedRecords[cleanSym] = barsList;
+
+        newDiscovered.push({
+          symbol: cleanSym,
+          name: `${cleanSym} Limited`,
+          market: 'NSE_EQ',
+          group: 'NSE All Equity',
+          sector: 'Equities',
+          industry: 'NSE Listed',
+          marketCapCr: 50000,
+          isFnO: false,
+          isFavorite: false,
+        });
+      }
+
+      onImportBhavcopy(normalizedRecords, newDiscovered);
+
+      const totalBars = Object.values(normalizedRecords).reduce((sum, b) => sum + b.length, 0);
+      setImportStatus({
+        success: true,
+        message: `Successfully synced latest Bhavcopy from Cloudflare R2: Loaded ${totalBars.toLocaleString()} records across all ${Object.keys(normalizedRecords).length} symbols! All symbols are now automatically present in your charts, scanner & watchlists.`,
+        rows: totalBars,
+        symbolsCount: Object.keys(normalizedRecords).length,
+      });
+    } catch (err: any) {
+      setImportStatus({
+        success: false,
+        message: err.message || 'Error syncing data from Cloudflare R2.',
+      });
+    } finally {
+      setIsR2Syncing(false);
+    }
+  };
+
   // User-defined Historical Range Backfill (e.g. 2023-12-01 to 2026-09-30 or 2021 to 2022)
   const handleRangeBackfill = (customStart?: string, customEnd?: string) => {
     const s = (customStart || backfillStart).trim();
@@ -170,12 +279,14 @@ export const BhavcopyDataManager: React.FC<BhavcopyDataManagerProps> = ({
 
     setIsProcessing(true);
     setTimeout(() => {
-      const rangedData = generateRangeHistoricalData(s, e);
+      // Pass all symbols currently in database plus STOCK_UNIVERSE so nothing is lost!
+      const existingSymbols = Object.keys(allMarketData);
+      const rangedData = generateRangeHistoricalData(s, e, existingSymbols);
       onImportBhavcopy(rangedData);
       const totalBars = Object.values(rangedData).reduce((sum, b) => sum + b.length, 0);
       setImportStatus({
         success: true,
-        message: `Successfully backfilled historical dataset for range ${s} → ${e}: Loaded ${totalBars.toLocaleString()} daily bars across ${Object.keys(rangedData).length} stocks! Ready for charting, exploration & backtesting.`,
+        message: `Successfully backfilled historical dataset for range ${s} → ${e}: Loaded ${totalBars.toLocaleString()} daily bars across all ${Object.keys(rangedData).length} stocks! Ready for charting, exploration & backtesting.`,
         rows: totalBars,
         symbolsCount: Object.keys(rangedData).length,
       });
@@ -183,9 +294,26 @@ export const BhavcopyDataManager: React.FC<BhavcopyDataManagerProps> = ({
     }, 150);
   };
 
-  // 1-Click Load 20-Year Full Historical NSE Database (2004 - 2026)
+  // 1-Click Load 20-Year Full Historical NSE Database (2004 - 2026) for ALL symbols
   const handleLoadTwentyYearHistory = () => {
     handleRangeBackfill('2004-01-01', '2026-09-30');
+  };
+
+  // 1-Click Load Broad NSE Universe (100+ Stocks across All Sectors)
+  const handleLoadBroadNseUniverse = () => {
+    setIsProcessing(true);
+    setTimeout(() => {
+      const allSyms = Array.from(new Set([...STOCK_UNIVERSE.map(s => s.symbol), ...Object.keys(allMarketData)]));
+      const rangedData = generateRangeHistoricalData('2023-01-01', new Date().toISOString().split('T')[0], allSyms);
+      onImportBhavcopy(rangedData);
+      setImportStatus({
+        success: true,
+        message: `Successfully loaded broad NSE universe: ${Object.keys(rangedData).length} symbols with complete daily bars!`,
+        rows: Object.values(rangedData).reduce((sum, b) => sum + b.length, 0),
+        symbolsCount: Object.keys(rangedData).length,
+      });
+      setIsProcessing(false);
+    }, 150);
   };
 
   // 1-Click Append Today's EOD Bhavcopy Bar
@@ -321,6 +449,61 @@ export const BhavcopyDataManager: React.FC<BhavcopyDataManagerProps> = ({
         </div>
       )}
 
+      {/* Cloudflare R2 Automated Zero-Bill Sync Card */}
+      <div className="mt-4 p-4 bg-gradient-to-r from-slate-900 via-cyan-950/40 to-slate-900 border border-cyan-500/40 rounded-lg shadow-lg">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
+          <div className="flex items-center gap-2">
+            <span className="px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800 text-[10px] font-mono font-bold flex items-center gap-1">
+              <Cloud className="w-3 h-3 text-cyan-400" />
+              <span>CLOUDFLARE R2 DIRECT SYNC</span>
+            </span>
+            <span className="text-[11px] text-emerald-400 font-mono font-semibold flex items-center gap-1">
+              <CheckCircle2 className="w-3 h-3" />
+              <span>Automatic All-Symbol Ingestion</span>
+            </span>
+          </div>
+          <span className="text-[11px] text-slate-400 font-mono">
+            {loadedSymbols.length} Symbols Cataloged
+          </span>
+        </div>
+
+        <h3 className="text-sm font-bold text-white mb-1">
+          Sync Complete NSE Bhavcopy & Deliverables from Cloudflare R2
+        </h3>
+        <p className="text-xs text-slate-300 mb-3 leading-relaxed">
+          No need to manually add stocks! Tapping sync automatically discovers and ingests <strong>all stocks present in the Bhavcopy</strong> (including new IPO listings, SME shares, and cash equities). All symbols are saved to offline storage and appear immediately across your charts, scanner, and watchlists.
+        </p>
+
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+          <div className="relative flex-1">
+            <Globe className="w-4 h-4 text-slate-500 absolute left-2.5 top-2.5" />
+            <input
+              type="text"
+              placeholder="Cloudflare R2 Public URL or Custom Domain (e.g. https://pub-xxxx.r2.dev or https://bhavcopy.domain.com)"
+              value={r2Url}
+              onChange={(e) => setR2Url(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-8 pr-3 py-2 text-xs font-mono text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none"
+            />
+          </div>
+          <button
+            onClick={handleSyncR2}
+            disabled={isR2Syncing}
+            className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold text-xs transition-colors shadow-md disabled:opacity-50 shrink-0"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isR2Syncing ? 'animate-spin' : ''}`} />
+            <span>{isR2Syncing ? 'Syncing All Stocks from R2...' : 'Sync All Stocks from R2'}</span>
+          </button>
+          <button
+            onClick={handleLoadBroadNseUniverse}
+            disabled={isProcessing}
+            className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold transition-colors shrink-0"
+          >
+            <PlusCircle className="w-3.5 h-3.5 text-cyan-400" />
+            <span>Preload Broad Universe (100+ Stocks)</span>
+          </button>
+        </div>
+      </div>
+
       {/* Action Centers: Custom Range Backfill Loader, Live Streamer, Daily EOD */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
         {/* Card 1: Historical Bhavcopy & Deliverables Date Range Backfiller */}
@@ -337,7 +520,7 @@ export const BhavcopyDataManager: React.FC<BhavcopyDataManagerProps> = ({
               Historical Bhavcopy & Deliverables Backfiller
             </h3>
             <p className="text-xs text-slate-400 mb-3 leading-relaxed">
-              Backfill historical OHLCV, Deliverable Volumes, and Corporate Actions for any custom date range. Runs entirely in your browser without needing to run GitHub workflows!
+              Backfill historical OHLCV, Deliverable Volumes, and Corporate Actions for all stocks across any custom date range. Runs entirely in your browser without needing to run GitHub workflows!
             </p>
 
             {/* Date Range Inputs */}
@@ -407,6 +590,13 @@ export const BhavcopyDataManager: React.FC<BhavcopyDataManagerProps> = ({
                 className="px-2 py-0.5 rounded text-[10px] font-mono bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-colors"
               >
                 2004 - 2026 (Full 20-Yr)
+              </button>
+              <button
+                type="button"
+                onClick={handleLoadBroadNseUniverse}
+                className="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 border border-emerald-800 transition-colors"
+              >
+                + Broad NSE Universe (100+ Stocks)
               </button>
             </div>
           </div>
