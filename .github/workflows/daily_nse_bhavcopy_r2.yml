@@ -2,9 +2,9 @@ name: Daily NSE Bhavcopy Ingestion to Cloudflare R2 (Free Tier Optimized)
 
 on:
   schedule:
-    # Runs at 13:30 UTC (19:00 IST / 7:00 PM IST) Monday to Friday
+    # Run at 13:30 UTC (19:00 IST) every Monday to Friday (after NSE publishes EOD Bhavcopy & MTO files)
     - cron: '30 13 * * 1-5'
-  workflow_dispatch: # Allows manual trigger from GitHub Actions tab
+  workflow_dispatch: # Allows manual trigger with optional date ranges from GitHub Actions tab
     inputs:
       start_date:
         description: 'Start Date (YYYY-MM-DD) - Leave empty for latest trading day (e.g. 2023-12-01)'
