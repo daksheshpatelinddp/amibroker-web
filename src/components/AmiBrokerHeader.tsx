@@ -27,8 +27,8 @@ import {
   Box,
 } from 'lucide-react';
 import { STOCK_UNIVERSE } from '../utils/sampleData';
-import { downloadCompleteProjectZip } from '../utils/projectZipExporter';
 
+  
 export type ActiveTab =
   | 'chart'
   | 'scanner'
