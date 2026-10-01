@@ -649,6 +649,15 @@ const SingleChartEngine: React.FC<SingleChartEngineProps> = ({
 const timeframedCandles = useMemo(() => {
   return resampleCandles(baseCandles, sheet.timeframe);
 }, [baseCandles, sheet.timeframe]);
+
+ // AFTER:
+const adjustedCandles = useMemo(() => {
+  return adjustCandleHistory(baseCandles, corporateActions, sheet.symbol, isAdjusted);
+}, [baseCandles, corporateActions, sheet.symbol, isAdjusted]);
+
+const timeframedCandles = useMemo(() => {
+  return resampleCandles(adjustedCandles, sheet.timeframe);
+}, [adjustedCandles, sheet.timeframe]);
   
   // Resample candles according to sheet timeframe
   const timeframedCandles = useMemo(() => {
