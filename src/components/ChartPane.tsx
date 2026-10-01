@@ -82,7 +82,6 @@ import {
   saveDrawings,
   clearDrawings,
 } from '../utils/drawingStorage';
-
 import { adjustCandleHistory } from '../utils/corporateActions';
 
 interface ChartPaneProps {
@@ -643,26 +642,16 @@ const SingleChartEngine: React.FC<SingleChartEngineProps> = ({
 
   // Drawing Tools State
   const [activeDrawingTool, setActiveDrawingTool] = useState<DrawingToolType>('cursor');
-  
-  //correction 
-  // BEFORE:
-const timeframedCandles = useMemo(() => {
-  return resampleCandles(baseCandles, sheet.timeframe);
-}, [baseCandles, sheet.timeframe]);
 
- // AFTER:
-const adjustedCandles = useMemo(() => {
-  return adjustCandleHistory(baseCandles, corporateActions, sheet.symbol, isAdjusted);
-}, [baseCandles, corporateActions, sheet.symbol, isAdjusted]);
+  // Apply corporate action adjustments backwards in time when isAdjusted is true
+  const adjustedCandles = useMemo(() => {
+    return adjustCandleHistory(baseCandles, corporateActions, sheet.symbol, isAdjusted);
+  }, [baseCandles, corporateActions, sheet.symbol, isAdjusted]);
 
-const timeframedCandles = useMemo(() => {
-  return resampleCandles(adjustedCandles, sheet.timeframe);
-}, [adjustedCandles, sheet.timeframe]);
-  
   // Resample candles according to sheet timeframe
   const timeframedCandles = useMemo(() => {
-    return resampleCandles(baseCandles, sheet.timeframe);
-  }, [baseCandles, sheet.timeframe]);
+    return resampleCandles(adjustedCandles, sheet.timeframe);
+  }, [adjustedCandles, sheet.timeframe]);
 
   // Sliced Visible Candles (Controlled by scrollbar and zoom)
   const totalCandles = timeframedCandles.length;
