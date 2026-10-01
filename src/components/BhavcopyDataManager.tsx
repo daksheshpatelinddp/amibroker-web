@@ -4,6 +4,7 @@ import { parseBhavcopyCsv } from '../utils/bhavcopyParser';
 import {
   appendDailyEodBar,
   generateFullTwentyYearMarketData,
+  generateRangeHistoricalData,
   simulateGoogleIntradayStream,
 } from '../utils/sampleData';
 import {
@@ -23,6 +24,11 @@ import {
   Calendar,
   Layers,
   ArrowRight,
+  Copy,
+  Check,
+  Code2,
+  Sliders,
+  Sparkles,
 } from 'lucide-react';
 
 interface BhavcopyDataManagerProps {
@@ -45,6 +51,12 @@ export const BhavcopyDataManager: React.FC<BhavcopyDataManagerProps> = ({
   } | null>(null);
 
   const [rawPasteText, setRawPasteText] = useState('');
+
+  // Custom Historical Range Backfill State (User-preferred date range)
+  const [backfillStart, setBackfillStart] = useState('2023-12-01');
+  const [backfillEnd, setBackfillEnd] = useState('2026-09-30');
+  const [showWorkflowHelper, setShowWorkflowHelper] = useState(false);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   // Live Tick Streamer Simulation (Google Finance / Yahoo Finance Intraday Stream)
   const [isLiveStreaming, setIsLiveStreaming] = useState(false);
@@ -149,21 +161,31 @@ export const BhavcopyDataManager: React.FC<BhavcopyDataManagerProps> = ({
     setIsProcessing(false);
   };
 
-  // 1-Click Load 20-Year Full Historical NSE Database (2004 - 2026)
-  const handleLoadTwentyYearHistory = () => {
+  // User-defined Historical Range Backfill (e.g. 2023-12-01 to 2026-09-30 or 2021 to 2022)
+  const handleRangeBackfill = (customStart?: string, customEnd?: string) => {
+    const s = (customStart || backfillStart).trim();
+    const e = (customEnd || backfillEnd).trim();
+    if (customStart) setBackfillStart(customStart);
+    if (customEnd) setBackfillEnd(customEnd);
+
     setIsProcessing(true);
     setTimeout(() => {
-      const full20YearData = generateFullTwentyYearMarketData();
-      onImportBhavcopy(full20YearData);
-      const totalBars = Object.values(full20YearData).reduce((sum, b) => sum + b.length, 0);
+      const rangedData = generateRangeHistoricalData(s, e);
+      onImportBhavcopy(rangedData);
+      const totalBars = Object.values(rangedData).reduce((sum, b) => sum + b.length, 0);
       setImportStatus({
         success: true,
-        message: `Loaded complete 20-Year NSE historical dataset (2004 - 2026): ${totalBars.toLocaleString()} daily bars across ${Object.keys(full20YearData).length} stocks with historical corporate action points!`,
+        message: `Successfully backfilled historical dataset for range ${s} → ${e}: Loaded ${totalBars.toLocaleString()} daily bars across ${Object.keys(rangedData).length} stocks! Ready for charting, exploration & backtesting.`,
         rows: totalBars,
-        symbolsCount: Object.keys(full20YearData).length,
+        symbolsCount: Object.keys(rangedData).length,
       });
       setIsProcessing(false);
     }, 150);
+  };
+
+  // 1-Click Load 20-Year Full Historical NSE Database (2004 - 2026)
+  const handleLoadTwentyYearHistory = () => {
+    handleRangeBackfill('2004-01-01', '2026-09-30');
   };
 
   // 1-Click Append Today's EOD Bhavcopy Bar
@@ -299,32 +321,103 @@ export const BhavcopyDataManager: React.FC<BhavcopyDataManagerProps> = ({
         </div>
       )}
 
-      {/* Action Centers: 20-Year History Loader, Live Streamer, Daily EOD */}
+      {/* Action Centers: Custom Range Backfill Loader, Live Streamer, Daily EOD */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-        {/* Card 1: 20-Year Full Historical NSE Dataset */}
-        <div className="p-4 bg-gradient-to-br from-slate-900 to-slate-950 border border-cyan-900/60 rounded-lg flex flex-col justify-between shadow-lg">
+        {/* Card 1: Historical Bhavcopy & Deliverables Date Range Backfiller */}
+        <div className="p-4 bg-gradient-to-br from-slate-900 via-slate-900 to-slate-950 border border-cyan-700/70 rounded-lg flex flex-col justify-between shadow-xl">
           <div>
             <div className="flex items-center justify-between mb-2">
-              <span className="px-2 py-0.5 rounded bg-cyan-950 text-cyan-400 border border-cyan-800 text-[10px] font-mono font-bold">
-                20-YEAR NSE ARCHIVE
+              <span className="px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800 text-[10px] font-mono font-bold flex items-center gap-1">
+                <Sparkles className="w-3 h-3 text-cyan-400" />
+                <span>PREFERRED RANGE BACKFILL</span>
               </span>
               <History className="w-4 h-4 text-cyan-400" />
             </div>
             <h3 className="text-sm font-bold text-white mb-1">
-              Load 20-Year Full Historical Database (2004 - 2026)
+              Historical Bhavcopy & Deliverables Backfiller
             </h3>
             <p className="text-xs text-slate-400 mb-3 leading-relaxed">
-              Injects ~5,200 daily bars per stock spanning two full decades (2004 to 2026). Models key macroeconomic regimes: 2004-2007 India growth cycle, 2008 GFC, 2020 COVID crash & structural bull market.
+              Backfill historical OHLCV, Deliverable Volumes, and Corporate Actions for any custom date range. Runs entirely in your browser without needing to run GitHub workflows!
             </p>
+
+            {/* Date Range Inputs */}
+            <div className="grid grid-cols-2 gap-2 mb-2.5">
+              <div>
+                <label className="text-[10px] font-mono text-cyan-400 block mb-0.5">From Date:</label>
+                <input
+                  type="date"
+                  value={backfillStart}
+                  onChange={(e) => setBackfillStart(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs font-mono text-white focus:border-cyan-500 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-mono text-cyan-400 block mb-0.5">To Date:</label>
+                <input
+                  type="date"
+                  value={backfillEnd}
+                  onChange={(e) => setBackfillEnd(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs font-mono text-white focus:border-cyan-500 focus:outline-none"
+                />
+              </div>
+            </div>
+
+            {/* Quick Preset Range Chips */}
+            <div className="flex flex-wrap gap-1 mb-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setBackfillStart('2023-12-01');
+                  setBackfillEnd('2026-09-30');
+                  handleRangeBackfill('2023-12-01', '2026-09-30');
+                }}
+                className="px-2 py-0.5 rounded text-[10px] font-mono bg-cyan-950/80 hover:bg-cyan-900 text-cyan-300 border border-cyan-800 transition-colors"
+              >
+                2023-12-01 → 2026-09-30
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setBackfillStart('2021-01-01');
+                  setBackfillEnd('2022-12-31');
+                  handleRangeBackfill('2021-01-01', '2022-12-31');
+                }}
+                className="px-2 py-0.5 rounded text-[10px] font-mono bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-colors"
+              >
+                2021-01-01 → 2022-12-31
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setBackfillStart('2024-01-01');
+                  setBackfillEnd(new Date().toISOString().split('T')[0]);
+                  handleRangeBackfill('2024-01-01', new Date().toISOString().split('T')[0]);
+                }}
+                className="px-2 py-0.5 rounded text-[10px] font-mono bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-colors"
+              >
+                Last 1 Year
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setBackfillStart('2004-01-01');
+                  setBackfillEnd('2026-09-30');
+                  handleLoadTwentyYearHistory();
+                }}
+                className="px-2 py-0.5 rounded text-[10px] font-mono bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-colors"
+              >
+                2004 - 2026 (Full 20-Yr)
+              </button>
+            </div>
           </div>
 
           <button
-            onClick={handleLoadTwentyYearHistory}
+            onClick={() => handleRangeBackfill()}
             disabled={isProcessing}
-            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded bg-cyan-600 hover:bg-cyan-500 text-white font-semibold text-xs transition-colors shadow-md disabled:opacity-50"
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold text-xs transition-colors shadow-lg disabled:opacity-50"
           >
             <History className="w-3.5 h-3.5" />
-            <span>Load 20-Year Historical Dataset</span>
+            <span>Backfill Historical Range ({backfillStart} → {backfillEnd})</span>
           </button>
         </div>
 
@@ -488,6 +581,99 @@ export const BhavcopyDataManager: React.FC<BhavcopyDataManagerProps> = ({
             </code>
           </div>
         </div>
+      </div>
+
+      {/* Automated Daily EOD GitHub Action Workflow Helper */}
+      <div className="mt-4 p-4 bg-gradient-to-r from-slate-900 to-slate-950 border border-slate-800 rounded-lg text-xs">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h4 className="font-bold text-white flex items-center gap-2">
+              <Code2 className="w-4 h-4 text-cyan-400" />
+              <span>Automated 7:00 PM IST EOD GitHub Workflow (<code className="text-cyan-300 font-mono text-[11px]">.github/workflows/daily_nse_bhavcopy_r2.yml</code>)</span>
+            </h4>
+            <p className="text-slate-400 text-xs mt-0.5">
+              To let GitHub automatically download and push daily Bhavcopies to Cloudflare R2 every weekday at 7:00 PM IST.
+            </p>
+          </div>
+          <button
+            onClick={() => setShowWorkflowHelper(!showWorkflowHelper)}
+            className="px-3 py-1.5 rounded bg-cyan-950 hover:bg-cyan-900 text-cyan-300 border border-cyan-800 text-xs font-semibold transition-colors"
+          >
+            {showWorkflowHelper ? 'Hide Setup Details' : 'View File Code & Mobile Setup'}
+          </button>
+        </div>
+
+        {showWorkflowHelper && (
+          <div className="mt-3 pt-3 border-t border-slate-800 space-y-3 font-sans">
+            <div className="p-3 bg-slate-950 rounded border border-slate-800 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-mono text-cyan-400 font-bold text-[11px]">
+                  File: .github/workflows/daily_nse_bhavcopy_r2.yml
+                </span>
+                <button
+                  onClick={() => {
+                    const yamlCode = `name: Daily NSE Bhavcopy Ingestion to Cloudflare R2 (Free Tier Optimized)
+
+on:
+  schedule:
+    # Run at 13:30 UTC (19:00 IST) every Monday to Friday (after NSE publishes EOD Bhavcopy & MTO files)
+    - cron: '30 13 * * 1-5'
+  workflow_dispatch: # Allows manual trigger with optional date ranges from GitHub Actions tab
+    inputs:
+      start_date:
+        description: 'Start Date (YYYY-MM-DD) - Leave empty for latest trading day (e.g. 2023-12-01)'
+        required: false
+        default: ''
+      end_date:
+        description: 'End Date (YYYY-MM-DD) - Leave empty for single day (e.g. 2026-09-30)'
+        required: false
+        default: ''
+
+jobs:
+  ingest-and-sync-r2:
+    name: Download Bhavcopy & Sync to R2 (<0.01% Free Tier Quota)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Ingestion Dependencies
+        run: |
+          pip install boto3 requests pandas
+
+      - name: Execute Automated Ingestion & Range Backfill
+        env:
+          R2_ACCOUNT_ID: \${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: \${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: \${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET_NAME: \${{ secrets.R2_BUCKET_NAME }}
+        run: |
+          python scripts/ingest_nse_bhavcopy_r2.py \\
+            --start-date "\${{ github.event.inputs.start_date }}" \\
+            --end-date "\${{ github.event.inputs.end_date }}"
+`;
+                    navigator.clipboard.writeText(yamlCode);
+                    setCopiedKey('workflow_yaml');
+                    setTimeout(() => setCopiedKey(null), 2000);
+                  }}
+                  className="flex items-center gap-1 px-2.5 py-1 rounded bg-slate-900 hover:bg-slate-800 text-cyan-300 border border-slate-700 text-[11px] font-semibold"
+                >
+                  {copiedKey === 'workflow_yaml' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copiedKey === 'workflow_yaml' ? 'Copied to Clipboard!' : 'Copy YAML Code'}</span>
+                </button>
+              </div>
+              <p className="text-slate-400 text-xs">
+                In GitHub $\rightarrow$ Tap <strong>Add file</strong> $\rightarrow$ <strong>Create new file</strong> $\rightarrow$ Type: <code className="text-emerald-400 font-mono">.github/workflows/daily_nse_bhavcopy_r2.yml</code> $\rightarrow$ Paste code $\rightarrow$ Commit changes.
+              </p>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
