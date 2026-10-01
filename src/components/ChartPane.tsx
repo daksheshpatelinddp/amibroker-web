@@ -83,6 +83,8 @@ import {
   clearDrawings,
 } from '../utils/drawingStorage';
 
+import { adjustCandleHistory } from '../utils/corporateActions';
+
 interface ChartPaneProps {
   candles: CandleBar[];
   symbol: string;
@@ -641,7 +643,13 @@ const SingleChartEngine: React.FC<SingleChartEngineProps> = ({
 
   // Drawing Tools State
   const [activeDrawingTool, setActiveDrawingTool] = useState<DrawingToolType>('cursor');
-
+  
+  //correction 
+  // BEFORE:
+const timeframedCandles = useMemo(() => {
+  return resampleCandles(baseCandles, sheet.timeframe);
+}, [baseCandles, sheet.timeframe]);
+  
   // Resample candles according to sheet timeframe
   const timeframedCandles = useMemo(() => {
     return resampleCandles(baseCandles, sheet.timeframe);
