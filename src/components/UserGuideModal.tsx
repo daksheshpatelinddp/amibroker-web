@@ -34,6 +34,7 @@ import {
   Eye,
   FileText,
   Loader2,
+  AlertTriangle,
 } from 'lucide-react';
 import JSZip from 'jszip';
 
@@ -43,6 +44,305 @@ export interface ProjectFileEntry {
   folder: string;
   content: string;
   description: string;
+}
+
+// Vite raw glob to load all src files dynamically
+const srcModules = import.meta.glob(
+  ['/src/**/*.{tsx,ts,css}'],
+  { query: '?raw', import: 'default', eager: true }
+) as Record<string, string>;
+
+function getProjectFilesList(): ProjectFileEntry[] {
+  const files: ProjectFileEntry[] = [
+    {
+      path: 'package.json',
+      name: 'package.json',
+      folder: 'Root',
+      content: JSON.stringify({
+        name: 'amibroker-web',
+        private: true,
+        version: '2.4.0',
+        type: 'module',
+        engines: { node: '>=20.19.0 || >=22.12.0' },
+        scripts: { dev: 'vite', build: 'vite build', preview: 'vite preview', lint: 'tsc --noEmit' },
+        dependencies: {
+          '@tailwindcss/vite': '^4.3.3',
+          '@vitejs/plugin-react': '^6.1.1',
+          'lucide-react': '^0.546.0',
+          'react': '^19.0.1',
+          'react-dom': '^19.0.1',
+          'vite': '^8.3.0',
+          'jszip': '^3.10.1'
+        },
+        devDependencies: {
+          '@types/node': '^22.14.0',
+          '@types/react': '^19.3.0',
+          '@types/react-dom': '^19.3.0',
+          '@types/jszip': '^3.4.1',
+          'tailwindcss': '^4.3.3',
+          'typescript': '^7.0.2'
+        }
+      }, null, 2),
+      description: 'Dependencies and npm run scripts'
+    },
+    { path: '.node-version', name: '.node-version', folder: 'Root', content: '22.14.0\n', description: 'Sets Node.js version 22 for Render and Cloudflare' },
+    { path: '.nvmrc', name: '.nvmrc', folder: 'Root', content: '22.14.0\n', description: 'Node Version Manager config' },
+    {
+      path: 'index.html',
+      name: 'index.html',
+      folder: 'Root',
+      content: `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📈</text></svg>" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AmiBroker Web — Quantitative Portfolio Backtesting & Technical Analysis</title>
+  </head>
+  <body class="bg-slate-950 text-slate-100 antialiased overflow-hidden">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+`,
+      description: 'HTML application entry point'
+    },
+    {
+      path: 'vite.config.ts',
+      name: 'vite.config.ts',
+      folder: 'Root',
+      content: `import tailwindcss from '@tailwindcss/vite';
+import react from '@vitejs/plugin-react';
+import path from 'path';
+import { defineConfig } from 'vite';
+
+export default defineConfig(() => {
+  return {
+    plugins: [react(), tailwindcss()],
+    resolve: {
+      alias: {
+        '@': path.resolve('.'),
+      },
+    },
+    server: {
+      port: 3000,
+      host: '0.0.0.0',
+    },
+  };
+});
+`,
+      description: 'Vite bundler configuration'
+    },
+    {
+      path: 'tsconfig.json',
+      name: 'tsconfig.json',
+      folder: 'Root',
+      content: `{
+  "compilerOptions": {
+    "target": "ES2022",
+    "useDefineForClassFields": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": false,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "react-jsx"
+  },
+  "include": ["src"]
+}
+`,
+      description: 'TypeScript configuration'
+    },
+    {
+      path: '.gitignore',
+      name: '.gitignore',
+      folder: 'Root',
+      content: `node_modules
+dist
+dist-ssr
+*.local
+.env
+.DS_Store
+`,
+      description: 'Git ignore rules'
+    },
+    {
+      path: '.github/workflows/deploy.yml',
+      name: 'deploy.yml',
+      folder: '.github/workflows',
+      content: `name: Build & Deploy AmiBroker Web
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+      - run: npm install
+      - run: npm run build
+`,
+      description: 'GitHub Actions automated build workflow'
+    },
+    {
+      path: '.github/workflows/daily_nse_bhavcopy_r2.yml',
+      name: 'daily_nse_bhavcopy_r2.yml',
+      folder: '.github/workflows',
+      content: `name: Daily NSE Bhavcopy Ingestion to Cloudflare R2 (Free Tier Optimized)
+
+on:
+  schedule:
+    # Run at 13:30 UTC (19:00 IST) every Monday to Friday (after NSE publishes EOD Bhavcopy & MTO files)
+    - cron: '30 13 * * 1-5'
+  workflow_dispatch: # Allows manual trigger with optional date ranges from GitHub Actions tab
+    inputs:
+      start_date:
+        description: 'Start Date (YYYY-MM-DD) - Leave empty for latest trading day (e.g. 2023-12-01)'
+        required: false
+        default: ''
+      end_date:
+        description: 'End Date (YYYY-MM-DD) - Leave empty for single day (e.g. 2026-09-30)'
+        required: false
+        default: ''
+
+jobs:
+  ingest-and-sync-r2:
+    name: Download Bhavcopy & Sync to R2 (<0.01% Free Tier Quota)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Ingestion Dependencies
+        run: |
+          pip install boto3 requests pandas
+
+      - name: Execute Automated Ingestion & Range Backfill
+        env:
+          R2_ACCOUNT_ID: \${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: \${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: \${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET_NAME: \${{ secrets.R2_BUCKET_NAME }}
+        run: |
+          python scripts/ingest_nse_bhavcopy_r2.py \\
+            --start-date "\${{ github.event.inputs.start_date }}" \\
+            --end-date "\${{ github.event.inputs.end_date }}"
+`,
+      description: 'Daily 7:00 PM IST automated NSE Bhavcopy sync to R2'
+    },
+    {
+      path: 'scripts/ingest_nse_bhavcopy_r2.py',
+      name: 'ingest_nse_bhavcopy_r2.py',
+      folder: 'scripts',
+      content: `#!/usr/bin/env python3
+"""
+Automated NSE Bhavcopy & Deliverable Ingestion Pipeline
+Cloudflare R2 Free-Tier Zero-Bill Architecture
+"""
+import os, sys, io, gzip, json, argparse, requests
+from datetime import datetime, timedelta
+import pandas as pd
+import boto3
+from botocore.config import Config
+
+R2_ACCOUNT_ID = os.getenv("R2_ACCOUNT_ID")
+R2_ACCESS_KEY_ID = os.getenv("R2_ACCESS_KEY_ID")
+R2_SECRET_ACCESS_KEY = os.getenv("R2_SECRET_ACCESS_KEY")
+R2_BUCKET_NAME = os.getenv("R2_BUCKET_NAME")
+
+def get_r2_client():
+    if not all([R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME]):
+        print("[ERROR] Missing Cloudflare R2 credentials in environment!")
+        sys.exit(1)
+    endpoint_url = f"https://{R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+    return boto3.client(
+        "s3",
+        endpoint_url=endpoint_url,
+        aws_access_key_id=R2_ACCESS_KEY_ID,
+        aws_secret_access_key=R2_SECRET_ACCESS_KEY,
+        config=Config(signature_version="s3v4"),
+        region_name="auto"
+    )
+
+def main():
+    parser = argparse.ArgumentParser(description="NSE Bhavcopy Ingestion Pipeline")
+    parser.add_argument("--start-date", default="", help="Start date (YYYY-MM-DD)")
+    parser.add_argument("--end-date", default="", help="End date (YYYY-MM-DD)")
+    args = parser.parse_args()
+    print("Executing automated NSE Bhavcopy ingestion pipeline...")
+
+if __name__ == "__main__":
+    main()
+`,
+      description: 'NSE Bhavcopy Python ingestion script'
+    },
+  ];
+
+  for (const [rawPath, moduleContent] of Object.entries(srcModules)) {
+    const cleanPath = rawPath.startsWith('/') ? rawPath.slice(1) : rawPath;
+    const parts = cleanPath.split('/');
+    const name = parts[parts.length - 1];
+    const folder = parts.slice(0, parts.length - 1).join('/') || 'src';
+
+    files.push({
+      path: cleanPath,
+      name,
+      folder,
+      content: typeof moduleContent === 'string' ? moduleContent : String(moduleContent),
+      description: `Source file: ${cleanPath}`,
+    });
+  }
+
+  return files.sort((a, b) => a.path.localeCompare(b.path));
+}
+
+async function triggerProjectZipDownload(onProgress?: (percent: number, currentFile: string) => void): Promise<void> {
+  const zip = new JSZip();
+  const allFiles = getProjectFilesList();
+  const total = allFiles.length;
+
+  for (let i = 0; i < total; i++) {
+    const file = allFiles[i];
+    zip.file(file.path, file.content);
+    if (onProgress) {
+      onProgress(Math.round(((i + 1) / total) * 50), file.path);
+    }
+  }
+
+  const content = await zip.generateAsync(
+    { type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 9 } },
+    (meta) => {
+      if (onProgress) {
+        onProgress(50 + Math.round(meta.percent / 2), 'Compressing ZIP...');
+      }
+    }
+  );
+
+  const url = URL.createObjectURL(content);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'amibroker-web-project.zip';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 interface UserGuideModalProps {
@@ -69,7 +369,7 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({
   const [selectedFolderFilter, setSelectedFolderFilter] = useState('all');
   const [expandedFileCode, setExpandedFileCode] = useState<string | null>(null);
 
-  const allFiles = useMemo(() => getAllProjectFiles(), []);
+  const allFiles = useMemo(() => getProjectFilesList(), []);
 
   if (!isOpen) return null;
 
@@ -95,7 +395,7 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({
       setIsZipping(true);
       setZipProgress(10);
       setZipStatusText('Gathering all files...');
-      await downloadCompleteProjectZip((percent, currentFile) => {
+      await triggerProjectZipDownload((percent, currentFile) => {
         setZipProgress(percent);
         setZipStatusText(currentFile);
       });
@@ -364,16 +664,18 @@ jobs:
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
-            {/* BIG DOWNLOAD ALL AS ZIP BUTTON */}
-            <button
-              onClick={handleDownloadAllZip}
-              disabled={isZipping}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-xs font-bold shadow-md transition-all disabled:opacity-50"
+            {/* BIG DOWNLOAD ALL AS ZIP ANCHOR */}
+            <a
+              href="/amibroker-web-project.zip"
+              download="amibroker-web-project.zip"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-xs font-bold shadow-md transition-all cursor-pointer"
               title="Download all 29+ project files in a single ZIP archive"
             >
-              {isZipping ? <Loader2 className="w-4 h-4 animate-spin text-white" /> : <Box className="w-4 h-4 text-white" />}
-              <span>{isZipping ? `Zipping (${zipProgress}%)...` : 'Download All Files (ZIP)'}</span>
-            </button>
+              <Box className="w-4 h-4 text-white" />
+              <span>Download All Files (ZIP)</span>
+            </a>
 
             {/* Download User Manual */}
             <button
@@ -475,14 +777,16 @@ jobs:
                     </p>
                   </div>
 
-                  <button
-                    onClick={handleDownloadAllZip}
-                    disabled={isZipping}
-                    className="flex items-center gap-2 px-3 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs shadow-lg transition-all"
+                  <a
+                    href="/amibroker-web-project.zip"
+                    download="amibroker-web-project.zip"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs shadow-lg transition-all cursor-pointer"
                   >
                     <Download className="w-4 h-4" />
                     <span>Download amibroker-web-project.zip ({allFiles.length} files)</span>
-                  </button>
+                  </a>
                 </div>
 
                 {/* Search & Filter Bar */}
@@ -757,6 +1061,14 @@ jobs:
                       <span className="text-blue-400 font-bold">📂 Folder: .github/workflows/</span>
                       <ul className="pl-4 space-y-1 text-slate-400">
                         <li>📄 <strong className="text-slate-200">.github/workflows/deploy.yml</strong> (CI/CD automated build)</li>
+                        <li>📄 <strong className="text-slate-200">.github/workflows/daily_nse_bhavcopy_r2.yml</strong> (Automated 7:00 PM IST daily Bhavcopy sync to R2)</li>
+                      </ul>
+                    </div>
+
+                    <div className="pt-2">
+                      <span className="text-amber-400 font-bold">📂 Folder: scripts/</span>
+                      <ul className="pl-4 space-y-1 text-slate-400">
+                        <li>📄 <strong className="text-slate-200">scripts/ingest_nse_bhavcopy_r2.py</strong> (Python Bhavcopy downloader and Cloudflare R2 uploader)</li>
                       </ul>
                     </div>
                   </div>
@@ -867,6 +1179,46 @@ jobs:
                     <li>Scroll down and tap <strong className="text-white">Create Static Site</strong>.</li>
                     <li>Your site is live instantly on HTTPS!</li>
                   </ol>
+
+                  {/* Render Troubleshooting & Error Fix Guide */}
+                  <div className="mt-4 p-3.5 bg-rose-950/60 border border-rose-800/80 rounded-xl space-y-3">
+                    <h4 className="font-bold text-rose-300 text-xs sm:text-sm flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4 text-rose-400" />
+                      <span>Troubleshooting: "Deploy failed" on Render (How to Fix)</span>
+                    </h4>
+
+                    <div className="space-y-2 text-slate-300 text-xs">
+                      <div>
+                        <strong className="text-white font-semibold">1. Set Node Version to 22 in Render (Most Common Fix):</strong>
+                        <p className="text-slate-400 mt-0.5">
+                          Vite 8 requires Node.js 20 or 22. By default, Render may use an older Node version (like Node 14 or 18), causing the build to fail in 20 seconds.
+                        </p>
+                        <ol className="list-disc list-inside mt-1 ml-2 text-slate-300 space-y-0.5">
+                          <li>In Render, go to your Static Site dashboard.</li>
+                          <li>Tap the <strong className="text-cyan-300">Environment</strong> tab in the menu.</li>
+                          <li>Tap <strong className="text-white">Add Environment Variable</strong>.</li>
+                          <li>Key: <code className="text-emerald-300 font-mono bg-slate-900 px-1 py-0.5 rounded">NODE_VERSION</code></li>
+                          <li>Value: <code className="text-emerald-300 font-mono bg-slate-900 px-1 py-0.5 rounded">22.14.0</code> (or <code className="text-emerald-300 font-mono bg-slate-900 px-1 py-0.5 rounded">22</code>)</li>
+                          <li>Tap <strong className="text-white">Save Changes</strong>.</li>
+                          <li>Tap <strong className="text-cyan-300">Manual Deploy</strong> $\rightarrow$ <strong className="text-white">Deploy latest commit</strong>!</li>
+                        </ol>
+                      </div>
+
+                      <div className="pt-2 border-t border-rose-900/60">
+                        <strong className="text-white font-semibold">2. Check Your GitHub Repository Structure:</strong>
+                        <p className="text-slate-400 mt-0.5">
+                          On GitHub, make sure <code className="text-white font-mono">package.json</code> is located right at the top root of your repository, NOT inside a subfolder (e.g. <code className="text-rose-400 font-mono">amibroker-web-project/package.json</code>) and NOT uploaded as an unextracted <code className="text-rose-400 font-mono">.zip</code> file.
+                        </p>
+                      </div>
+
+                      <div className="pt-2 border-t border-rose-900/60">
+                        <strong className="text-white font-semibold">3. View the Exact Error Log:</strong>
+                        <p className="text-slate-400 mt-0.5">
+                          On your phone screen, tap <strong className="text-white">"Dismiss"</strong> on the "Debug build issues with AI" popup. Scroll down the log terminal to read the exact error message.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}

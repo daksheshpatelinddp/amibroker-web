@@ -28,7 +28,6 @@ import {
 } from 'lucide-react';
 import { STOCK_UNIVERSE } from '../utils/sampleData';
 
-  
 export type ActiveTab =
   | 'chart'
   | 'scanner'
@@ -330,26 +329,23 @@ export const AmiBrokerHeader: React.FC<AmiBrokerHeaderProps> = ({
                 </button>
               </div>
 
-              downloadCompleteProjectZip();
-
-              onOpenUserGuide();
-
               {/* Direct Quick Action: Download Project ZIP & User Manual */}
               <div className="pb-2 space-y-1.5">
-                <button
-                  onClick={() => {
-                    downloadCompleteProjectZip();
-                    setIsMainMenuOpen(false);
-                  }}
-                  className="w-full flex items-center justify-between p-2 rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-xs font-bold transition-all shadow-md"
-                  title="Download all 29+ project files in a single ZIP file"
+                <a
+                  href="/amibroker-web-project.zip"
+                  download="amibroker-web-project.zip"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => setIsMainMenuOpen(false)}
+                  className="w-full flex items-center justify-between p-2 rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-xs font-bold transition-all shadow-md cursor-pointer"
+                  title="Direct download amibroker-web-project.zip"
                 >
                   <span className="flex items-center gap-2">
                     <Box className="w-4 h-4 text-white" />
                     <span>Download All 29+ Files (ZIP)</span>
                   </span>
                   <Download className="w-3.5 h-3.5 text-white" />
-                </button>
+                </a>
 
                 <button
                   onClick={() => {
