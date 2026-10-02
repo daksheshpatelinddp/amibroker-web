@@ -1,4 +1,4 @@
-import { CandleBar, StockMetadata } from '../types/market';
+import { CandleBar } from '../types/market';
 import { resolveCanonicalSymbol } from './corporateActions';
 
 export interface ParsedBhavcopyRow {
@@ -16,33 +16,6 @@ export interface ParsedBhavcopyRow {
   deliveryQty?: number;
   deliveryPct?: number;
 }
-
-/**
- * Known NSE F&O Symbols set for tagging market type
- */
-const KNOWN_FNO_SYMBOLS = new Set([
-  'RELIANCE', 'TCS', 'HDFCBANK', 'INFY', 'ICICIBANK', 'BHARTIARTL', 'TATAMOTORS',
-  'TATASTEEL', 'SBIN', 'LT', 'ITC', 'HINDUNILVR', 'BAJFINANCE', 'MARUTI',
-  'SUNPHARMA', 'AXISBANK', 'KOTAKBANK', 'TITAN', 'ADANIENT', 'NTPC', 'M&M',
-  'TRENT', 'LTIM', 'POWERGRID', 'ONGC', 'COALINDIA', 'BPCL', 'IOC', 'GAIL',
-  'BEL', 'HAL', 'BHEL', 'SUZLON', 'ZOMATO', 'JIOFIN', 'IRCTC', 'TATACHEM',
-  'TATAPOWER', 'VEDL', 'HINDALCO', 'JSWSTEEL', 'ASIANPAINT', 'ULTRACEMCO',
-  'GRASIM', 'CIPLA', 'DRREDDY', 'APOLLOHOSP', 'DIVISLAB', 'EICHERMOT',
-  'HEROMOTOCO', 'BAJAJ-AUTO', 'NESTLEIND', 'BRITANNIA', 'INDUSINDBK',
-  'TECHM', 'WIPRO', 'HDFCLIFE', 'SBILIFE', 'BAJAJFINSV', 'ADANIPORTS',
-  'DLF', 'CANBK', 'PNB', 'YESBANK', 'DIXON', 'POLYCAB', 'PERSISTENT', 'COFORGE',
-  'ASTRAL', 'AUROPHARMA', 'BANDHANBNK', 'BANKBARODA', 'BERGEPAINT', 'BIOCON',
-  'BOSCHLTD', 'CHOLAFIN', 'COLPAL', 'CONCOR', 'COROMANDEL', 'CUMMINSIND',
-  'DABUR', 'DEEPAKNTR', 'ESCORTS', 'EXIDEIND', 'FEDERALBNK', 'GODREJCP',
-  'GODREJPROP', 'GRANULES', 'GUJGASLTD', 'HAVELLS', 'HINDCOPPER', 'HINDPETRO',
-  'IGL', 'INDUSTOWER', 'IPCALAB', 'JINDALSTEL', 'JUBLFOOD', 'LALPATHLAB',
-  'LICHSGFIN', 'LUPIN', 'MANAPPURAM', 'MARICO', 'MCX', 'METROPOLIS', 'MFSL',
-  'MGL', 'MOTHERSON', 'MPHASIS', 'MUTHOOTFIN', 'NATIONALUM', 'NAVINFLUOR',
-  'OBEROIRLTY', 'OFSS', 'PAGEIND', 'PEL', 'PETRONET', 'PFC', 'PIDILITIND',
-  'PIIND', 'PNB', 'RAMCOCEM', 'RBLBANK', 'RECLTD', 'SAIL', 'SHREECEM',
-  'SIEMENS', 'SRF', 'SUNTV', 'SYNGENE', 'TATACOMM', 'TVSMOTOR', 'UBL',
-  'VOLTAS', 'ZYDUSLIFE'
-]);
 
 /**
  * Standardize NSE Date formats:
@@ -89,19 +62,16 @@ export function normalizeNseDate(dateStr: string): string {
  * 1. Old Bhavcopy (`cmDDMMMYYYYbhav.csv`)
  * 2. New Unified Bhavcopy (`sec_bhavdata_full_DDMMYYYY.csv`)
  * 3. Standard OHLCV CSV
- * 
- * Automatically captures ALL NSE stocks (including new listings, IPOs, SME, Trade-for-Trade).
  */
 export function parseBhavcopyCsv(csvText: string): {
   success: boolean;
   rowsCount: number;
   recordsBySymbol: Record<string, CandleBar[]>;
-  discoveredMetadata: StockMetadata[];
   errors: string[];
 } {
   const lines = csvText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
   if (lines.length < 2) {
-    return { success: false, rowsCount: 0, recordsBySymbol: {}, discoveredMetadata: [], errors: ['Empty CSV or missing header'] };
+    return { success: false, rowsCount: 0, recordsBySymbol: {}, errors: ['Empty CSV or missing header'] };
   }
 
   const rawHeaders = lines[0].split(',').map(h => h.trim().toUpperCase().replace(/["']/g, ''));
@@ -133,18 +103,13 @@ export function parseBhavcopyCsv(csvText: string): {
       success: false,
       rowsCount: 0,
       recordsBySymbol: {},
-      discoveredMetadata: [],
       errors: ['Required columns (SYMBOL and CLOSE) not detected in CSV header.'],
     };
   }
 
   const recordsBySymbol: Record<string, CandleBar[]> = {};
-  const metadataMap = new Map<string, StockMetadata>();
   let validCount = 0;
   const errors: string[] = [];
-
-  // Exclude non-equity debt/bond series (government bonds, treasury bills, mutual funds)
-  const EXCLUDED_SERIES = new Set(['GS', 'GB', 'SG', 'TB', 'MF']);
 
   for (let i = 1; i < lines.length; i++) {
     const row = lines[i].split(',').map(v => v.trim().replace(/["']/g, ''));
@@ -153,8 +118,9 @@ export function parseBhavcopyCsv(csvText: string): {
     const rawSymbol = row[symbolIdx]?.toUpperCase();
     if (!rawSymbol) continue;
 
-    const series = seriesIdx !== -1 ? (row[seriesIdx]?.toUpperCase() || 'EQ') : 'EQ';
-    if (EXCLUDED_SERIES.has(series)) {
+    const series = seriesIdx !== -1 ? row[seriesIdx]?.toUpperCase() : 'EQ';
+    // Prioritize equity segment EQ / BE / BZ
+    if (seriesIdx !== -1 && series !== 'EQ' && series !== 'BE' && series !== 'BZ') {
       continue;
     }
 
@@ -182,28 +148,8 @@ export function parseBhavcopyCsv(csvText: string): {
       close,
       volume,
       deliveryQty: delivQty,
-      deliveryPct: delivPct !== undefined ? delivPct : (delivQty && volume > 0 ? Math.min(100, Number(((delivQty / volume) * 100).toFixed(2))) : undefined),
+      deliveryPct: delivPct !== undefined ? delivPct : (delivQty ? Math.min(100, Number(((delivQty / volume) * 100).toFixed(2))) : undefined),
     });
-
-    // Auto-discover and generate StockMetadata for ANY symbol from Bhavcopy
-    if (!metadataMap.has(canonicalSymbol)) {
-      const isFnO = KNOWN_FNO_SYMBOLS.has(canonicalSymbol);
-      const isSME = series === 'SM' || series === 'ST';
-      const market = isSME ? 'NSE_SME' : isFnO ? 'NSE_FNO' : 'NSE_EQ';
-      const group = isSME ? 'NSE SME Emerge' : isFnO ? 'Nifty 50' : 'NSE All Equity';
-
-      metadataMap.set(canonicalSymbol, {
-        symbol: canonicalSymbol,
-        name: `${canonicalSymbol} Limited`,
-        market,
-        group,
-        sector: isSME ? 'SME Growth' : 'Equities',
-        industry: isSME ? 'SME Platform' : 'NSE Listed',
-        marketCapCr: Math.round(close * (volume > 10000 ? 50 : 10)),
-        isFnO,
-        isFavorite: false,
-      });
-    }
 
     validCount++;
   }
@@ -217,7 +163,6 @@ export function parseBhavcopyCsv(csvText: string): {
     success: validCount > 0,
     rowsCount: validCount,
     recordsBySymbol,
-    discoveredMetadata: Array.from(metadataMap.values()),
     errors,
   };
 }
