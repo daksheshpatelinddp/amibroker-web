@@ -645,31 +645,22 @@ const SingleChartEngine: React.FC<SingleChartEngineProps> = ({
 
   // Apply corporate action adjustments backwards in time when isAdjusted is true
   const adjustedCandles = useMemo(() => {
-    if (!baseCandles || !Array.isArray(baseCandles) || baseCandles.length === 0) return [];
-    return adjustCandleHistory(baseCandles, corporateActions || [], sheet.symbol, isAdjusted);
+    return adjustCandleHistory(baseCandles, corporateActions, sheet.symbol, isAdjusted);
   }, [baseCandles, corporateActions, sheet.symbol, isAdjusted]);
 
   // Resample candles according to sheet timeframe
   const timeframedCandles = useMemo(() => {
-    if (!adjustedCandles || adjustedCandles.length === 0) return [];
-    try {
-      const res = resampleCandles(adjustedCandles, sheet.timeframe);
-      return Array.isArray(res) && res.length > 0 ? res : adjustedCandles;
-    } catch (e) {
-      console.warn('[ChartPane] resampleCandles error:', e);
-      return adjustedCandles;
-    }
+    return resampleCandles(adjustedCandles, sheet.timeframe);
   }, [adjustedCandles, sheet.timeframe]);
 
   // Sliced Visible Candles (Controlled by scrollbar and zoom)
-  const totalCandles = timeframedCandles ? timeframedCandles.length : 0;
+  const totalCandles = timeframedCandles.length;
   const maxScroll = Math.max(0, totalCandles - visibleBarsCount);
   const safeOffset = Math.min(maxScroll, Math.max(0, scrollOffset));
   const endIndex = Math.max(0, totalCandles - safeOffset);
   const startIndex = Math.max(0, endIndex - visibleBarsCount);
 
   const displayCandles = useMemo(() => {
-    if (!timeframedCandles || timeframedCandles.length === 0) return [];
     const slice = timeframedCandles.slice(startIndex, endIndex);
     if (sheet.chartType === 'heikin_ashi') {
       return calculateHeikinAshi(slice);
@@ -1419,10 +1410,10 @@ const SingleChartEngine: React.FC<SingleChartEngineProps> = ({
         <div className="flex items-center gap-3">
           <span className="text-slate-400 font-semibold">{activeBar?.date || '—'}</span>
           <div className="flex items-center gap-2">
-            <span>O: <b className="text-slate-200">{activeBar?.open != null ? `₹${activeBar.open.toFixed(2)}` : '—'}</b></span>
-            <span>H: <b className="text-emerald-400">{activeBar?.high != null ? `₹${activeBar.high.toFixed(2)}` : '—'}</b></span>
-            <span>L: <b className="text-rose-400">{activeBar?.low != null ? `₹${activeBar.low.toFixed(2)}` : '—'}</b></span>
-            <span>C: <b className={barChange >= 0 ? 'text-emerald-400' : 'text-rose-400'}>{activeBar?.close != null ? `₹${activeBar.close.toFixed(2)}` : '—'}</b></span>
+            <span>O: <b className="text-slate-200">₹{activeBar?.open.toFixed(2) || '—'}</b></span>
+            <span>H: <b className="text-emerald-400">₹{activeBar?.high.toFixed(2) || '—'}</b></span>
+            <span>L: <b className="text-rose-400">₹{activeBar?.low.toFixed(2) || '—'}</b></span>
+            <span>C: <b className={barChange >= 0 ? 'text-emerald-400' : 'text-rose-400'}>₹{activeBar?.close.toFixed(2) || '—'}</b></span>
           </div>
 
           <span className={`px-1.5 py-0.2 rounded text-[11px] font-bold ${barChange >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
