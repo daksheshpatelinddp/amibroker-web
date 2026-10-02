@@ -13,8 +13,6 @@ import {
   saveMarketDataToStorage,
   loadMarketDataFromStorage,
   clearMarketDataFromStorage,
-  saveStockUniverseToStorage,
-  loadStockUniverseFromStorage,
 } from './utils/marketStorage';
 import { ActiveTab, AmiBrokerHeader } from './components/AmiBrokerHeader';
 import { ChartPane } from './components/ChartPane';
@@ -46,42 +44,12 @@ export default function App() {
   // In-memory Market Data storage (raw Bhavcopy OHLCV + Delivery)
   const [allMarketData, setAllMarketData] = useState<Record<string, CandleBar[]>>(INITIAL_MARKET_DATA);
 
-  // Restore persistent historical dataset and universe from IndexedDB on startup
+  // Restore persistent historical dataset from IndexedDB on startup so it never disappears on refresh
   useEffect(() => {
-    Promise.all([
-      loadMarketDataFromStorage(),
-      loadStockUniverseFromStorage(),
-    ]).then(([savedData, savedUniverse]) => {
-      let currentUniverse = savedUniverse && savedUniverse.length > 0 ? savedUniverse : STOCK_UNIVERSE;
-
+    loadMarketDataFromStorage().then((savedData) => {
       if (savedData && Object.keys(savedData).length > 0) {
         setAllMarketData(savedData);
-
-        // Ensure all symbols in savedData are represented in stockUniverse
-        const existingSymSet = new Set(currentUniverse.map((s) => s.symbol));
-        const newEntries: StockMetadata[] = [];
-        for (const sym of Object.keys(savedData)) {
-          if (!existingSymSet.has(sym)) {
-            newEntries.push({
-              symbol: sym,
-              name: `${sym} Limited`,
-              market: 'NSE_EQ',
-              group: 'NSE All Equity',
-              sector: 'Equities',
-              industry: 'NSE Listed',
-              marketCapCr: 50000,
-              isFnO: false,
-              isFavorite: false,
-            });
-            existingSymSet.add(sym);
-          }
-        }
-        if (newEntries.length > 0) {
-          currentUniverse = [...currentUniverse, ...newEntries];
-        }
       }
-
-      setStockUniverse(currentUniverse);
     });
   }, []);
 
@@ -114,39 +82,11 @@ export default function App() {
 
   // Handlers
   const handleSelectSymbol = (symbol: string) => {
-    const cleanSym = symbol.trim().toUpperCase();
-    if (!allMarketData[cleanSym]) {
-      const newBars = generateRealisticNseHistory(cleanSym, 250, 0.02, 0.25);
-      setAllMarketData((prev) => {
-        const next = { ...prev, [cleanSym]: newBars };
-        saveMarketDataToStorage(next);
-        return next;
-      });
-      setStockUniverse((prev) => {
-        if (prev.some((s) => s.symbol === cleanSym)) return prev;
-        const updated: StockMetadata[] = [
-          ...prev,
-          {
-            symbol: cleanSym,
-            name: `${cleanSym} Limited`,
-            market: 'NSE_EQ' as const,
-            group: 'NSE All Equity',
-            sector: 'Equities',
-            industry: 'NSE Listed',
-            marketCapCr: 50000,
-            isFnO: true,
-            isFavorite: false,
-          },
-        ];
-        saveStockUniverseToStorage(updated);
-        return updated;
-      });
-    }
-    setSelectedSymbol(cleanSym);
+    setSelectedSymbol(symbol);
   };
 
   const handleSelectSymbolForChart = (symbol: string) => {
-    handleSelectSymbol(symbol);
+    setSelectedSymbol(symbol);
     setActiveTab('chart');
   };
 
@@ -154,10 +94,7 @@ export default function App() {
     setCorporateActions((prev) => [newAction, ...prev]);
   };
 
-  const handleImportBhavcopy = (
-    newData: Record<string, CandleBar[]>,
-    newMetadata?: StockMetadata[]
-  ) => {
+  const handleImportBhavcopy = (newData: Record<string, CandleBar[]>) => {
     setAllMarketData((prev) => {
       const merged = { ...prev };
       for (const [sym, bars] of Object.entries(newData)) {
@@ -177,47 +114,10 @@ export default function App() {
       saveMarketDataToStorage(merged);
       return merged;
     });
-
-    // Automatically register all symbols from Bhavcopy into stock universe
-    setStockUniverse((prev) => {
-      const existingMap = new Map<string, StockMetadata>();
-      prev.forEach((s) => existingMap.set(s.symbol, s));
-
-      // Merge explicit metadata from parser
-      if (newMetadata) {
-        newMetadata.forEach((m) => {
-          if (!existingMap.has(m.symbol)) {
-            existingMap.set(m.symbol, m);
-          }
-        });
-      }
-
-      // Check all symbols present in imported data
-      for (const sym of Object.keys(newData)) {
-        if (!existingMap.has(sym)) {
-          existingMap.set(sym, {
-            symbol: sym,
-            name: `${sym} Limited`,
-            market: 'NSE_EQ' as const,
-            group: 'NSE All Equity',
-            sector: 'Equities',
-            industry: 'NSE Listed',
-            marketCapCr: 50000,
-            isFnO: false,
-            isFavorite: false,
-          });
-        }
-      }
-
-      const updated = Array.from(existingMap.values());
-      saveStockUniverseToStorage(updated);
-      return updated;
-    });
   };
 
   const handleResetSampleData = () => {
     setAllMarketData(INITIAL_MARKET_DATA);
-    setStockUniverse(STOCK_UNIVERSE);
     setCorporateActions(DEFAULT_CORPORATE_ACTIONS);
     clearMarketDataFromStorage();
   };
