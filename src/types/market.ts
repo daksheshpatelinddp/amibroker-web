@@ -245,7 +245,7 @@ export interface CorporateAction {
   newSymbol?: string;
 }
 
-export type MarketCategory = 'NSE_EQ' | 'NSE_FNO' | 'NSE_SME' | 'BSE' | 'INDEX';
+export type MarketCategory = 'NSE_EQ' | 'NSE_FNO' | 'BSE' | 'INDEX';
 
 export interface StockMetadata {
   symbol: string;
