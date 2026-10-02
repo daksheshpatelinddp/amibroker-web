@@ -1,0 +1,9 @@
+name = "amibroker-web"
+compatibility_date = "2024-09-01"
+
+[site]
+bucket = "./dist"
+
+[[r2_buckets]]
+binding = "BHAVCOPY_BUCKET"
+bucket_name = "bhavcopy-store"

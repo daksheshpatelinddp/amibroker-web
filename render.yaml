@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: amibroker-web
+    env: static
+    buildCommand: npm install --include=dev && npm run build
+    staticPublishPath: ./dist
+    envVars:
+      - key: NODE_VERSION
+        value: 20.18.0
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
