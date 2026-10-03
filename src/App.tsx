@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { CandleBar, CorporateAction, StockMetadata, Watchlist } from './types/market';
+import { CandleBar, CorporateAction, StockMetadata, Watchlist, ChartType, SubIndicatorType } from './types/market';
 import { INITIAL_MARKET_DATA, STOCK_UNIVERSE, generateRealisticNseHistory } from './utils/sampleData';
 import { DEFAULT_CORPORATE_ACTIONS, adjustCandleHistory } from './utils/corporateActions';
 import { AFL_TEMPLATES } from './utils/aflEngine';
@@ -34,6 +34,11 @@ export default function App() {
   const [showCloudGuide, setShowCloudGuide] = useState<boolean>(false);
   const [showCategoriesModal, setShowCategoriesModal] = useState<boolean>(false);
   const [showUserGuide, setShowUserGuide] = useState<boolean>(false);
+
+  // Signals for opening indicators modal and changing chart styles from Main Menu
+  const [openSettingsSignal, setOpenSettingsSignal] = useState<number>(0);
+  const [chartTypeSignal, setChartTypeSignal] = useState<ChartType | undefined>(undefined);
+  const [subIndicatorSignal, setSubIndicatorSignal] = useState<SubIndicatorType | undefined>(undefined);
 
   // AmiBroker Symbol Categories, Stock Universe & Watchlists
   const [stockUniverse, setStockUniverse] = useState<StockMetadata[]>(STOCK_UNIVERSE);
@@ -292,6 +297,18 @@ export default function App() {
         onOpenCloudGuide={() => setShowCloudGuide(true)}
         onOpenCategoriesWatchlists={() => setShowCategoriesModal(true)}
         onOpenUserGuide={() => setShowUserGuide(true)}
+        onOpenIndicatorCustomizer={() => {
+          setActiveTab('chart');
+          setOpenSettingsSignal(Date.now());
+        }}
+        onSelectChartStyle={(style) => {
+          setChartTypeSignal(style);
+          setActiveTab('chart');
+        }}
+        onSelectSubIndicator={(indicator) => {
+          setSubIndicatorSignal(indicator);
+          setActiveTab('chart');
+        }}
       />
 
       {/* Main Workspace Viewport */}
@@ -305,6 +322,9 @@ export default function App() {
             onToggleAdjusted={() => setIsAdjusted((prev) => !prev)}
             allMarketData={allMarketData}
             onSelectSymbol={handleSelectSymbol}
+            openSettingsSignal={openSettingsSignal}
+            chartTypeSignal={chartTypeSignal}
+            subIndicatorSignal={subIndicatorSignal}
           />
         )}
 
