@@ -176,7 +176,7 @@ export const BhavcopyDataManager: React.FC<BhavcopyDataManagerProps> = ({
     if (!cleanUrl) {
       setImportStatus({
         success: false,
-        message: 'Please enter your Cloudflare R2 public bucket URL or custom domain (e.g. https://pub-xxxx.r2.dev or https://bhavcopy.yourdomain.com).',
+        message: 'Please enter your Cloudflare R2 public bucket URL or custom domain (e.g. https://pub-xxxx.r2.dev or https://pub-xxxx.r2.dev/bse_bhavcopy.csv).',
       });
       return;
     }
@@ -190,12 +190,25 @@ export const BhavcopyDataManager: React.FC<BhavcopyDataManagerProps> = ({
     setImportStatus(null);
 
     try {
-      const endpoints = [
-        `${cleanUrl}/data/eod_latest.json.gz`,
-        `${cleanUrl}/data/eod_latest.json`,
-      ];
+      const isDirectFile = /\.(csv|json|gz|txt)$/i.test(cleanUrl);
+      const endpoints = isDirectFile
+        ? [cleanUrl]
+        : [
+            cleanUrl,
+            `${cleanUrl}/bse_bhavcopy.csv`,
+            `${cleanUrl}/data/bse_bhavcopy.csv`,
+            `${cleanUrl}/bhavcopy.csv`,
+            `${cleanUrl}/data/bhavcopy.csv`,
+            `${cleanUrl}/data/eod_latest.json.gz`,
+            `${cleanUrl}/data/eod_latest.json`,
+            `${cleanUrl}/data/eod_latest.csv`,
+            `${cleanUrl}/eod_latest.json`,
+            `${cleanUrl}/eod_latest.csv`,
+          ];
 
       let fetchedData: any = null;
+      let isCsvData = false;
+      let csvContent = '';
       let usedEndpoint = '';
 
       for (const ep of endpoints) {
@@ -203,30 +216,71 @@ export const BhavcopyDataManager: React.FC<BhavcopyDataManagerProps> = ({
           const res = await fetch(ep, { mode: 'cors' });
           if (res.ok) {
             usedEndpoint = ep;
+            const contentType = res.headers.get('content-type') || '';
             if (ep.endsWith('.gz')) {
               const blob = await res.blob();
               if (typeof DecompressionStream !== 'undefined') {
                 const ds = new DecompressionStream('gzip');
                 const stream = blob.stream().pipeThrough(ds);
                 const decompressedRes = new Response(stream);
-                fetchedData = await decompressedRes.json();
+                const text = await decompressedRes.text();
+                try {
+                  fetchedData = JSON.parse(text);
+                } catch {
+                  csvContent = text;
+                  isCsvData = true;
+                }
               } else {
                 const txt = await blob.text();
-                fetchedData = JSON.parse(txt);
+                try {
+                  fetchedData = JSON.parse(txt);
+                } catch {
+                  csvContent = txt;
+                  isCsvData = true;
+                }
               }
+            } else if (ep.endsWith('.csv') || contentType.includes('text/csv') || contentType.includes('text/plain')) {
+              csvContent = await res.text();
+              isCsvData = true;
             } else {
-              fetchedData = await res.json();
+              const text = await res.text();
+              try {
+                fetchedData = JSON.parse(text);
+              } catch {
+                if (text.includes(',') && (text.includes('SYMBOL') || text.includes('SC_NAME') || text.includes('CLOSE'))) {
+                  csvContent = text;
+                  isCsvData = true;
+                }
+              }
             }
-            if (fetchedData) break;
+
+            if (fetchedData || isCsvData) break;
           }
         } catch (e) {
           console.warn(`[R2 Sync] Fetch failed for ${ep}:`, e);
         }
       }
 
+      if (isCsvData && csvContent) {
+        const result = parseBhavcopyCsv(csvContent);
+        if (result.success && Object.keys(result.recordsBySymbol).length > 0) {
+          onImportBhavcopy(result.recordsBySymbol, result.discoveredMetadata);
+          const totalSymbols = Object.keys(result.recordsBySymbol).length;
+          setImportStatus({
+            success: true,
+            message: `Successfully synced & imported from R2 (${usedEndpoint})! Automatically ingested ${result.rowsCount.toLocaleString()} records across all ${totalSymbols.toLocaleString()} symbols into your universe without needing manual additions.`,
+            rows: result.rowsCount,
+            symbolsCount: totalSymbols,
+          });
+          return;
+        } else {
+          throw new Error(result.errors.join('; ') || 'CSV retrieved from R2 could not be parsed.');
+        }
+      }
+
       if (!fetchedData || typeof fetchedData !== 'object' || Object.keys(fetchedData).length === 0) {
         throw new Error(
-          `Could not load Bhavcopy from ${cleanUrl}. Check: 1) CORS Policy is enabled in R2 bucket Settings. 2) GitHub Action has uploaded data/eod_latest.json.gz.`
+          `Could not read Bhavcopy from ${cleanUrl}. If you get a CORS error, ensure CORS is enabled on your Cloudflare R2 bucket: Settings -> CORS Policy -> Allowed Origins: ["*"], Allowed Methods: ["GET"]. You can also paste the CSV text directly in the 'Paste CSV Text' tab below.`
         );
       }
 
@@ -238,13 +292,14 @@ export const BhavcopyDataManager: React.FC<BhavcopyDataManagerProps> = ({
         const barsList: CandleBar[] = Array.isArray(barOrBars) ? (barOrBars as CandleBar[]) : [barOrBars as CandleBar];
         normalizedRecords[cleanSym] = barsList;
 
+        const isBse = cleanSym.startsWith('5') && /^\d+$/.test(cleanSym);
         newDiscovered.push({
           symbol: cleanSym,
           name: `${cleanSym} Limited`,
-          market: 'NSE_EQ',
-          group: 'NSE All Equity',
-          sector: 'Equities',
-          industry: 'NSE Listed',
+          market: isBse ? 'BSE' : 'NSE_EQ',
+          group: isBse ? 'BSE All Equities' : 'NSE All Equity',
+          sector: isBse ? 'BSE Listed' : 'Equities',
+          industry: isBse ? 'BSE Listed' : 'NSE Listed',
           marketCapCr: 50000,
           isFnO: false,
           isFavorite: false,
@@ -256,14 +311,14 @@ export const BhavcopyDataManager: React.FC<BhavcopyDataManagerProps> = ({
       const totalBars = Object.values(normalizedRecords).reduce((sum, b) => sum + b.length, 0);
       setImportStatus({
         success: true,
-        message: `Successfully synced latest Bhavcopy from Cloudflare R2: Loaded ${totalBars.toLocaleString()} records across all ${Object.keys(normalizedRecords).length} symbols! All symbols are now automatically present in your charts, scanner & watchlists.`,
+        message: `Successfully synced latest Bhavcopy from Cloudflare R2: Loaded ${totalBars.toLocaleString()} records across all ${Object.keys(normalizedRecords).length.toLocaleString()} symbols! All symbols are now automatically present in your charts, scanner & watchlists.`,
         rows: totalBars,
         symbolsCount: Object.keys(normalizedRecords).length,
       });
     } catch (err: any) {
       setImportStatus({
         success: false,
-        message: err.message || 'Error syncing data from Cloudflare R2.',
+        message: err.message || 'Error syncing data from Cloudflare R2. Check bucket CORS settings or try pasting CSV directly.',
       });
     } finally {
       setIsR2Syncing(false);

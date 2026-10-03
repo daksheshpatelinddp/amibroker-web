@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import {
   CandleBar,
   ChartSheet,
@@ -92,6 +92,9 @@ interface ChartPaneProps {
   onToggleAdjusted: () => void;
   allMarketData?: Record<string, CandleBar[]>;
   onSelectSymbol?: (symbol: string) => void;
+  openSettingsSignal?: number;
+  chartTypeSignal?: ChartType;
+  subIndicatorSignal?: SubIndicatorType;
 }
 
 const DEFAULT_SETTINGS: IndicatorSettings = {
@@ -271,6 +274,9 @@ export const ChartPane: React.FC<ChartPaneProps> = ({
   onToggleAdjusted,
   allMarketData,
   onSelectSymbol,
+  openSettingsSignal,
+  chartTypeSignal,
+  subIndicatorSignal,
 }) => {
   // Chart Sheets State
   const [sheets, setSheets] = useState<ChartSheet[]>(INITIAL_SHEETS);
@@ -278,6 +284,23 @@ export const ChartPane: React.FC<ChartPaneProps> = ({
   const [layoutMode, setLayoutMode] = useState<'single' | 'split-h' | 'split-v' | 'quad'>('single');
   const [editingSheetId, setEditingSheetId] = useState<string | null>(null);
   const [editSheetName, setEditSheetName] = useState<string>('');
+
+  // Handle external signals from Main Menu
+  useEffect(() => {
+    if (chartTypeSignal) {
+      setSheets((prev) =>
+        prev.map((s) => (s.id === activeSheetId ? { ...s, chartType: chartTypeSignal } : s))
+      );
+    }
+  }, [chartTypeSignal, activeSheetId]);
+
+  useEffect(() => {
+    if (subIndicatorSignal) {
+      setSheets((prev) =>
+        prev.map((s) => (s.id === activeSheetId ? { ...s, subIndicator: subIndicatorSignal } : s))
+      );
+    }
+  }, [subIndicatorSignal, activeSheetId]);
 
   // Active sheet
   const activeSheet = useMemo(() => {
@@ -427,6 +450,7 @@ export const ChartPane: React.FC<ChartPaneProps> = ({
               onUpdateSheet={handleUpdateSheet}
               onSelectSymbol={onSelectSymbol}
               availableSymbols={allMarketData ? Object.keys(allMarketData) : [sheet.symbol]}
+              openSettingsTrigger={sheet.id === activeSheetId ? openSettingsSignal : undefined}
             />
           );
         })}
@@ -605,6 +629,7 @@ interface SingleChartEngineProps {
   onUpdateSheet: (updated: ChartSheet) => void;
   onSelectSymbol?: (symbol: string) => void;
   availableSymbols: string[];
+  openSettingsTrigger?: number;
 }
 
 const SingleChartEngine: React.FC<SingleChartEngineProps> = ({
@@ -618,8 +643,12 @@ const SingleChartEngine: React.FC<SingleChartEngineProps> = ({
   onUpdateSheet,
   onSelectSymbol,
   availableSymbols,
+  openSettingsTrigger,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
+  const scrollbarTrackRef = useRef<HTMLDivElement>(null);
+  const isDraggingScrollbar = useRef(false);
+
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const [hoverY, setHoverY] = useState<number | null>(null);
 
@@ -629,6 +658,13 @@ const SingleChartEngine: React.FC<SingleChartEngineProps> = ({
 
   // Settings Modal State
   const [showSettingsModal, setShowSettingsModal] = useState(false);
+
+  // Open modal if external signal triggered from Main Menu
+  useEffect(() => {
+    if (openSettingsTrigger && openSettingsTrigger > 0) {
+      setShowSettingsModal(true);
+    }
+  }, [openSettingsTrigger]);
 
   // Dropdown Popovers State
   const [showTfPopover, setShowTfPopover] = useState(false);
@@ -667,6 +703,68 @@ const SingleChartEngine: React.FC<SingleChartEngineProps> = ({
   const safeOffset = Math.min(maxScroll, Math.max(0, scrollOffset));
   const endIndex = Math.max(0, totalCandles - safeOffset);
   const startIndex = Math.max(0, endIndex - visibleBarsCount);
+
+  // Drag & Touch Scrollbar Helper
+  const updateScrollFromClientX = useCallback(
+    (clientX: number) => {
+      if (!scrollbarTrackRef.current || totalCandles <= visibleBarsCount) return;
+      const rect = scrollbarTrackRef.current.getBoundingClientRect();
+      const clickRatio = Math.max(0, Math.min(1, (clientX - rect.left) / Math.max(1, rect.width)));
+      const targetStart = Math.round(clickRatio * (totalCandles - visibleBarsCount));
+      const newOffset = Math.max(0, totalCandles - (targetStart + visibleBarsCount));
+      setScrollOffset(Math.min(maxScroll, Math.max(0, newOffset)));
+    },
+    [totalCandles, visibleBarsCount, maxScroll]
+  );
+
+  const handleScrollbarPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    isDraggingScrollbar.current = true;
+    updateScrollFromClientX(e.clientX);
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {}
+  };
+
+  const handleScrollbarPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (isDraggingScrollbar.current) {
+      updateScrollFromClientX(e.clientX);
+    }
+  };
+
+  const handleScrollbarPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    isDraggingScrollbar.current = false;
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {}
+  };
+
+  const handleScrollbarTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches && e.touches[0]) {
+      updateScrollFromClientX(e.touches[0].clientX);
+    }
+  };
+
+  // Keyboard navigation: 1 candle left/right with Arrow keys
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement ||
+        e.target instanceof HTMLSelectElement
+      ) {
+        return;
+      }
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        setScrollOffset((prev) => Math.min(maxScroll, prev + 1));
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        setScrollOffset((prev) => Math.max(0, prev - 1));
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [maxScroll]);
 
   const displayCandles = useMemo(() => {
     if (!timeframedCandles || timeframedCandles.length === 0) return [];
@@ -2354,44 +2452,74 @@ const SingleChartEngine: React.FC<SingleChartEngineProps> = ({
       {/* ===================================================================== */}
       {/* 4. INTERACTIVE HORIZONTAL SCROLLBAR: PAN LEFT/RIGHT, DRAGGABLE THUMB  */}
       {/* ===================================================================== */}
-      <div className="flex items-center gap-1.5 px-3 py-1 bg-slate-950 border-t border-slate-800 text-[10px] font-mono text-slate-400 select-none">
-        {/* Pan Left (Back in History) */}
+      <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-950 border-t border-slate-800 text-[10px] font-mono text-slate-400 select-none">
+        {/* Fast Pan 10 Bars Left */}
         <button
-          onClick={() => setScrollOffset((prev) => Math.min(maxScroll, prev + 15))}
-          title="Pan Left (Back in Time)"
-          className="p-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 transition-colors"
+          onClick={() => setScrollOffset((prev) => Math.min(maxScroll, prev + 10))}
+          title="Pan Left by 10 Candles (Fast)"
+          className="hidden sm:inline-flex px-1.5 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-800 text-[9px] font-bold"
+        >
+          «10
+        </button>
+
+        {/* Pan Left: EXACTLY 1 Candle Left (Back in History) */}
+        <button
+          onClick={() => setScrollOffset((prev) => Math.min(maxScroll, prev + 1))}
+          title="Move 1 Candle Left (Back in Time)"
+          className="p-1 rounded bg-slate-900 hover:bg-cyan-950 hover:text-cyan-300 active:bg-cyan-900 text-slate-200 border border-slate-700 transition-colors shadow-sm"
         >
           <ChevronLeft className="w-3.5 h-3.5" />
         </button>
 
-        {/* Scrollbar Track */}
+        {/* Touch & Mouse Draggable Scrollbar Track */}
         <div
-          className="flex-1 h-3 bg-slate-900 rounded-full relative cursor-pointer border border-slate-800 overflow-hidden"
-          onClick={(e) => {
-            const rect = e.currentTarget.getBoundingClientRect();
-            const clickRatio = (e.clientX - rect.left) / rect.width;
-            const targetStart = Math.round(clickRatio * totalCandles);
-            const newOffset = Math.max(0, totalCandles - (targetStart + visibleBarsCount));
-            setScrollOffset(Math.min(maxScroll, newOffset));
-          }}
+          ref={scrollbarTrackRef}
+          onPointerDown={handleScrollbarPointerDown}
+          onPointerMove={handleScrollbarPointerMove}
+          onPointerUp={handleScrollbarPointerUp}
+          onTouchMove={handleScrollbarTouchMove}
+          className="flex-1 h-5 sm:h-4 bg-slate-900 rounded-full relative cursor-pointer border border-slate-800 overflow-hidden touch-none select-none flex items-center"
+          title="Touch and drag horizontally to move chart left or right"
         >
-          {/* Scrollbar Thumb */}
+          {/* Scrollbar Track background ticks */}
+          <div className="absolute inset-0 flex justify-between px-2 opacity-15 pointer-events-none">
+            {[...Array(10)].map((_, i) => (
+              <div key={i} className="w-[1px] h-full bg-slate-400" />
+            ))}
+          </div>
+
+          {/* Draggable Scrollbar Thumb */}
           <div
-            className="absolute top-0 bottom-0 bg-cyan-600/70 hover:bg-cyan-500 rounded-full transition-all cursor-grab active:cursor-grabbing border border-cyan-400/50"
+            className="absolute top-0.5 bottom-0.5 bg-gradient-to-r from-cyan-600 via-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-400 rounded-full transition-colors cursor-grab active:cursor-grabbing border border-cyan-300/60 shadow-[0_0_8px_rgba(6,182,212,0.4)] flex items-center justify-center"
             style={{
               left: `${(startIndex / Math.max(1, totalCandles)) * 100}%`,
-              width: `${Math.max(4, (n / Math.max(1, totalCandles)) * 100)}%`,
+              width: `${Math.max(5, (n / Math.max(1, totalCandles)) * 100)}%`,
             }}
-          />
+          >
+            {/* Grip lines */}
+            <div className="flex gap-0.5 opacity-80 pointer-events-none">
+              <div className="w-0.5 h-2 bg-white/70 rounded-full" />
+              <div className="w-0.5 h-2 bg-white/70 rounded-full" />
+            </div>
+          </div>
         </div>
 
-        {/* Pan Right (Forward in History) */}
+        {/* Pan Right: EXACTLY 1 Candle Right (Forward in History) */}
         <button
-          onClick={() => setScrollOffset((prev) => Math.max(0, prev - 15))}
-          title="Pan Right (Forward in Time)"
-          className="p-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 transition-colors"
+          onClick={() => setScrollOffset((prev) => Math.max(0, prev - 1))}
+          title="Move 1 Candle Right (Forward in Time)"
+          className="p-1 rounded bg-slate-900 hover:bg-cyan-950 hover:text-cyan-300 active:bg-cyan-900 text-slate-200 border border-slate-700 transition-colors shadow-sm"
         >
           <ChevronRight className="w-3.5 h-3.5" />
+        </button>
+
+        {/* Fast Pan 10 Bars Right */}
+        <button
+          onClick={() => setScrollOffset((prev) => Math.max(0, prev - 10))}
+          title="Pan Right by 10 Candles (Fast)"
+          className="hidden sm:inline-flex px-1.5 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-800 text-[9px] font-bold"
+        >
+          10»
         </button>
 
         {/* Jump to Latest Bar */}

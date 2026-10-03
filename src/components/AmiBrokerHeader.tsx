@@ -25,8 +25,11 @@ import {
   ChevronRight,
   Eye,
   Box,
+  Settings,
+  Settings2,
 } from 'lucide-react';
 import { STOCK_UNIVERSE } from '../utils/sampleData';
+import { ChartType, SubIndicatorType } from '../types/market';
 
 export type ActiveTab =
   | 'chart'
@@ -48,6 +51,9 @@ interface AmiBrokerHeaderProps {
   onOpenCloudGuide: () => void;
   onOpenCategoriesWatchlists: () => void;
   onOpenUserGuide: () => void;
+  onOpenIndicatorCustomizer?: () => void;
+  onSelectChartStyle?: (style: ChartType) => void;
+  onSelectSubIndicator?: (indicator: SubIndicatorType) => void;
 }
 
 export const AmiBrokerHeader: React.FC<AmiBrokerHeaderProps> = ({
@@ -61,6 +67,9 @@ export const AmiBrokerHeader: React.FC<AmiBrokerHeaderProps> = ({
   onOpenCloudGuide,
   onOpenCategoriesWatchlists,
   onOpenUserGuide,
+  onOpenIndicatorCustomizer,
+  onSelectChartStyle,
+  onSelectSubIndicator,
 }) => {
   // Search state
   const [searchQuery, setSearchQuery] = useState('');
@@ -595,18 +604,25 @@ export const AmiBrokerHeader: React.FC<AmiBrokerHeaderProps> = ({
                 {expandedSubmenu === 'candles' && (
                   <div className="mt-1 space-y-1 pl-1">
                     <div className="text-[10px] text-slate-500 mb-1">
-                      Available on Chart Sheet toolbar:
+                      Click style to apply immediately:
                     </div>
-                    {['Candlestick', 'OHLC Bar Chart', 'Line Chart', 'Heikin Ashi'].map((st) => (
+                    {[
+                      { id: 'candlestick' as ChartType, label: 'Candlestick' },
+                      { id: 'ohlc_bar' as ChartType, label: 'OHLC Bar Chart' },
+                      { id: 'line' as ChartType, label: 'Line Chart' },
+                      { id: 'heikin_ashi' as ChartType, label: 'Heikin Ashi' },
+                    ].map((st) => (
                       <button
-                        key={st}
+                        key={st.id}
                         onClick={() => {
+                          onSelectChartStyle?.(st.id);
                           onTabChange('chart');
                           setIsMainMenuOpen(false);
                         }}
-                        className="w-full text-left p-1 rounded hover:bg-slate-800 text-slate-300 text-xs"
+                        className="w-full text-left p-1.5 rounded hover:bg-slate-800 text-slate-200 hover:text-cyan-300 text-xs flex items-center justify-between transition-colors"
                       >
-                        • {st}
+                        <span>• {st.label}</span>
+                        <ChevronRight className="w-3 h-3 text-slate-500" />
                       </button>
                     ))}
                   </div>
@@ -629,25 +645,50 @@ export const AmiBrokerHeader: React.FC<AmiBrokerHeaderProps> = ({
                 </button>
 
                 {expandedSubmenu === 'ma' && (
-                  <div className="mt-1 space-y-1 pl-1 text-slate-300 text-xs">
-                    <div className="p-1.5 rounded bg-slate-950 border border-slate-800 text-[11px] text-slate-400 mb-1">
-                      Each MA has its own properties (period, type, source, color):
-                    </div>
-                    <div>• Fast EMA (Period 20)</div>
-                    <div>• Slow EMA (Period 50)</div>
-                    <div>• Long Term SMA (Period 200)</div>
-                    <div>• Hull Moving Average (HULL)</div>
-                    <div>• Double Exponential (DEMA) / WMA / TMA</div>
-                    <div>• Volume-Weighted Average Price (VWAP)</div>
+                  <div className="mt-1 space-y-1.5 pl-1 text-slate-300 text-xs">
                     <button
                       onClick={() => {
                         onTabChange('chart');
+                        onOpenIndicatorCustomizer?.();
                         setIsMainMenuOpen(false);
                       }}
-                      className="mt-1 text-cyan-300 hover:underline block"
+                      className="w-full flex items-center justify-between p-2 rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold text-xs shadow-md transition-all cursor-pointer"
                     >
-                      Configure on Chart Pane →
+                      <span className="flex items-center gap-1.5">
+                        <Settings2 className="w-4 h-4 text-white" />
+                        <span>Customize All Moving Averages</span>
+                      </span>
+                      <ChevronRight className="w-3.5 h-3.5 text-white" />
                     </button>
+
+                    <div className="p-1.5 rounded bg-slate-950 border border-slate-800 text-[11px] text-slate-400">
+                      Click to customize period, type (EMA/SMA/Hull), source & color:
+                    </div>
+
+                    {[
+                      { name: 'Fast EMA (Period 20)', desc: 'Short-term momentum' },
+                      { name: 'Slow EMA (Period 50)', desc: 'Medium-term trend' },
+                      { name: 'Long Term SMA (Period 200)', desc: 'Institutional baseline' },
+                      { name: 'Hull Moving Average (HULL)', desc: 'Zero-lag smoothing' },
+                      { name: 'DEMA / TMA / WMA', desc: 'Advanced weighted averages' },
+                      { name: 'Volume-Weighted Average Price (VWAP)', desc: 'Intraday volume anchor' },
+                    ].map((ma) => (
+                      <button
+                        key={ma.name}
+                        onClick={() => {
+                          onTabChange('chart');
+                          onOpenIndicatorCustomizer?.();
+                          setIsMainMenuOpen(false);
+                        }}
+                        className="w-full text-left p-1.5 rounded hover:bg-slate-800 text-slate-200 hover:text-cyan-300 text-xs flex items-center justify-between transition-colors"
+                      >
+                        <div>
+                          <div className="font-semibold">• {ma.name}</div>
+                          <div className="text-[10px] text-slate-500 pl-2">{ma.desc}</div>
+                        </div>
+                        <Settings className="w-3 h-3 text-slate-500" />
+                      </button>
+                    ))}
                   </div>
                 )}
               </div>
@@ -669,25 +710,78 @@ export const AmiBrokerHeader: React.FC<AmiBrokerHeaderProps> = ({
 
                 {expandedSubmenu === 'indicators' && (
                   <div className="mt-1 space-y-2 pl-1 text-[11px]">
-                    <div className="border-b border-slate-800 pb-1">
-                      <span className="text-cyan-400 font-bold block mb-0.5">Overlays (Separate Properties):</span>
-                      <div className="text-slate-400 space-y-0.5">
-                        <div>• Bollinger Bands (20, 2)</div>
-                        <div>• Supertrend (10, 3)</div>
-                        <div>• ATR Trailing Stop (Chandelier)</div>
-                        <div>• Parabolic SAR</div>
-                        <div>• Donchian Channels (20)</div>
+                    <button
+                      onClick={() => {
+                        onTabChange('chart');
+                        onOpenIndicatorCustomizer?.();
+                        setIsMainMenuOpen(false);
+                      }}
+                      className="w-full flex items-center justify-between p-2 rounded-lg bg-gradient-to-r from-emerald-600 to-cyan-600 hover:from-emerald-500 hover:to-cyan-500 text-white font-bold text-xs shadow-md transition-all cursor-pointer"
+                    >
+                      <span className="flex items-center gap-1.5">
+                        <SlidersHorizontal className="w-4 h-4 text-white" />
+                        <span>Open Indicator Customizer (Popup)</span>
+                      </span>
+                      <ChevronRight className="w-3.5 h-3.5 text-white" />
+                    </button>
+
+                    {/* Chart Overlays */}
+                    <div className="border-b border-slate-800 pb-2">
+                      <span className="text-cyan-400 font-bold block mb-1">Chart Overlays (Click to customize):</span>
+                      <div className="space-y-1">
+                        {[
+                          { name: 'Bollinger Bands (20, 2.0σ)', desc: 'Volatility bands' },
+                          { name: 'Supertrend (10, 3.0 ATR)', desc: 'Trend direction stop' },
+                          { name: 'ATR Trailing Stop (Chandelier)', desc: 'AmiBroker trailing exit' },
+                          { name: 'Parabolic SAR (0.02, 0.20)', desc: 'Reversal accelerator' },
+                          { name: 'Donchian Channels (20-bar)', desc: 'High-Low breakout channel' },
+                          { name: 'Volume Profile & Delivery %', desc: 'Institutional volume shock' },
+                        ].map((ov) => (
+                          <button
+                            key={ov.name}
+                            onClick={() => {
+                              onTabChange('chart');
+                              onOpenIndicatorCustomizer?.();
+                              setIsMainMenuOpen(false);
+                            }}
+                            className="w-full text-left p-1 rounded hover:bg-slate-800 text-slate-300 hover:text-cyan-300 flex items-center justify-between transition-colors"
+                          >
+                            <span>• {ov.name}</span>
+                            <span className="text-[10px] text-slate-500">{ov.desc}</span>
+                          </button>
+                        ))}
                       </div>
                     </div>
+
+                    {/* Lower Sub-Indicator Panes */}
                     <div>
-                      <span className="text-amber-400 font-bold block mb-0.5">Lower Panes (Separate Properties):</span>
-                      <div className="text-slate-400 space-y-0.5">
-                        <div>• RSI (Relative Strength Index)</div>
-                        <div>• MACD (12, 26, 9)</div>
-                        <div>• Stochastic (14, 3, 3)</div>
-                        <div>• ATR (Average True Range)</div>
-                        <div>• ADX / DMI</div>
-                        <div>• CCI, Williams %R, MFI, OBV, ROC</div>
+                      <span className="text-amber-400 font-bold block mb-1">Lower Pane Oscillators (Click to apply):</span>
+                      <div className="space-y-1">
+                        {[
+                          { id: 'rsi' as SubIndicatorType, name: 'RSI (Relative Strength Index 14)' },
+                          { id: 'macd' as SubIndicatorType, name: 'MACD (12, 26, Signal 9)' },
+                          { id: 'stochastic' as SubIndicatorType, name: 'Stochastic Oscillator (14, 3, 3)' },
+                          { id: 'adx' as SubIndicatorType, name: 'ADX / Directional Movement Index' },
+                          { id: 'atr' as SubIndicatorType, name: 'ATR (Average True Range 14)' },
+                          { id: 'cci' as SubIndicatorType, name: 'CCI (Commodity Channel Index 20)' },
+                          { id: 'williams_r' as SubIndicatorType, name: 'Williams %R Oscillator' },
+                          { id: 'mfi' as SubIndicatorType, name: 'MFI (Money Flow Index 14)' },
+                          { id: 'obv' as SubIndicatorType, name: 'OBV (On Balance Volume)' },
+                          { id: 'roc' as SubIndicatorType, name: 'ROC (Rate of Change Momentum)' },
+                        ].map((sub) => (
+                          <button
+                            key={sub.id}
+                            onClick={() => {
+                              onSelectSubIndicator?.(sub.id);
+                              onTabChange('chart');
+                              setIsMainMenuOpen(false);
+                            }}
+                            className="w-full text-left p-1 rounded hover:bg-slate-800 text-slate-300 hover:text-amber-300 flex items-center justify-between transition-colors"
+                          >
+                            <span>• {sub.name}</span>
+                            <ChevronRight className="w-3 h-3 text-slate-500" />
+                          </button>
+                        ))}
                       </div>
                     </div>
                   </div>

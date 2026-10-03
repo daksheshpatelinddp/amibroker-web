@@ -281,10 +281,29 @@ export const CorporateActionManager: React.FC<CorporateActionManagerProps> = ({
                     <option value="BONUS">Bonus Issue</option>
                     <option value="RIGHTS">Rights Issue</option>
                     <option value="DEMERGER">Demerger / Spin-off</option>
+                    <option value="MERGER">Merger / Amalgamation</option>
                     <option value="SYMBOL_CHANGE">Symbol Name Change</option>
                   </select>
                 </div>
               </div>
+
+              {newActionType === 'MERGER' && (
+                <div className="p-2.5 bg-slate-950 rounded border border-slate-800 text-[11px] space-y-1">
+                  <div className="font-semibold text-cyan-300">Merger / Amalgamation Adjustment</div>
+                  <div className="text-slate-400 text-[10px]">
+                    Ratio represents share swap (e.g. 10:1 or 4:1). Set factor to adjust historical price scale of merged entity.
+                  </div>
+                </div>
+              )}
+
+              {newActionType === 'SYMBOL_CHANGE' && (
+                <div className="p-2.5 bg-slate-950 rounded border border-slate-800 text-[11px] space-y-2">
+                  <div className="font-semibold text-cyan-300">Symbol Name Change / Rebranding</div>
+                  <div className="text-slate-400 text-[10px]">
+                    Maps old symbol ticker (or BSE scrip code) to new canonical symbol so all historical bars connect continuously.
+                  </div>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
