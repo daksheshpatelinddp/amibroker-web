@@ -224,21 +224,82 @@ def main():
         print(f"[+] Total symbols collected: {len(range_data_by_symbol)}")
 
         # Upload consolidated range bundle
-        range_filename = f"data/history_{start_d}_to_{end_d}.json.gz"
+        range_filename = f"data/history_nse_{start_d}_to_{end_d}.json.gz"
         upload_bundle_to_r2(s3_client, bucket_name, range_data_by_symbol, range_filename, is_immutable=True)
-        # Also update current latest bundle
+        # Also update current latest bundles
         upload_bundle_to_r2(s3_client, bucket_name, range_data_by_symbol, "data/eod_latest.json.gz", is_immutable=False)
+        upload_bundle_to_r2(s3_client, bucket_name, range_data_by_symbol, "data/nse_latest.json.gz", is_immutable=False)
 
-        # Upload manifest
+        # Build symbol catalog
+        symbol_catalog = []
+        for sym in sorted(range_data_by_symbol.keys()):
+            bars = range_data_by_symbol[sym]
+            last_bar = bars[-1] if bars else {}
+            symbol_catalog.append({
+                "symbol": sym,
+                "name": f"{sym} Limited",
+                "market": "NSE_EQ",
+                "group": "NSE All Equity",
+                "sector": "Equities",
+                "industry": "NSE Listed",
+                "marketCapCr": 50000,
+                "candlesCount": len(bars),
+                "latestDate": last_bar.get("date", ""),
+                "latestClose": last_bar.get("close", 0),
+                "isFnO": False,
+                "isFavorite": False,
+            })
+
+        # Upload symbol catalog (both uncompressed JSON and JSON.gz for mobile compatibility)
         if s3_client:
+            nse_cat_json = json.dumps(symbol_catalog).encode("utf-8")
+            s3_client.put_object(
+                Bucket=bucket_name,
+                Key="data/symbols_nse.json",
+                Body=nse_cat_json,
+                ContentType="application/json",
+                CacheControl="public, max-age=300",
+            )
+
+            # Check if BSE catalog exists to merge into unified symbols.json
+            combined_catalog = list(symbol_catalog)
+            try:
+                bse_obj = s3_client.get_object(Bucket=bucket_name, Key="data/symbols_bse.json")
+                existing_bse = json.loads(bse_obj['Body'].read().decode('utf-8'))
+                if isinstance(existing_bse, list):
+                    nse_set = set(s['symbol'] for s in combined_catalog)
+                    for item in existing_bse:
+                        if item.get('symbol') not in nse_set:
+                            combined_catalog.append(item)
+                    print(f"[+] Preserved & merged {len(existing_bse)} BSE symbols into data/symbols.json")
+            except Exception:
+                pass
+
+            s3_client.put_object(
+                Bucket=bucket_name,
+                Key="data/symbols.json",
+                Body=json.dumps(combined_catalog).encode("utf-8"),
+                ContentType="application/json",
+                CacheControl="public, max-age=300",
+            )
+
             manifest = {
                 "lastUpdated": datetime.datetime.utcnow().isoformat() + "Z",
                 "mode": "RANGE_BACKFILL",
+                "source": "NSE",
+                "market": "NSE_BHAVCOPY_UNIFIED_MTO",
                 "startDate": str(start_d),
                 "endDate": str(end_d),
                 "tradingDaysCount": trading_days_count,
                 "totalSymbols": len(range_data_by_symbol),
-                "source": "NSE_BHAVCOPY_UNIFIED_MTO",
+                "files": {
+                    "eodLatest": "data/eod_latest.json.gz",
+                    "nseLatest": "data/nse_latest.json.gz",
+                    "symbols": "data/symbols.json",
+                    "symbolsNse": "data/symbols_nse.json",
+                    "history": range_filename,
+                },
+                "symbols": list(range_data_by_symbol.keys()),
             }
             s3_client.put_object(
                 Bucket=bucket_name,
@@ -247,7 +308,7 @@ def main():
                 ContentType="application/json",
                 CacheControl="public, max-age=60",
             )
-            print("[+] Successfully uploaded manifest.json to R2.")
+            print(f"[+] Successfully uploaded manifest.json and symbols catalog ({len(symbol_catalog)} symbols) to R2.")
 
     # Mode 2: Single Specific Date or Daily EOD Mode
     else:
@@ -290,17 +351,85 @@ def main():
 
         # Upload daily latest bundle to R2
         upload_bundle_to_r2(s3_client, bucket_name, records, "data/eod_latest.json.gz", is_immutable=False)
+        upload_bundle_to_r2(s3_client, bucket_name, records, "data/nse_latest.json.gz", is_immutable=False)
+
+        # Build symbol catalog
+        symbol_catalog = []
+        for sym in sorted(records.keys()):
+            bar = records[sym]
+            symbol_catalog.append({
+                "symbol": sym,
+                "name": f"{sym} Limited",
+                "market": "NSE_EQ",
+                "group": "NSE All Equity",
+                "sector": "Equities",
+                "industry": "NSE Listed",
+                "marketCapCr": 50000,
+                "candlesCount": 1,
+                "latestDate": bar.get("date", target_date.strftime("%Y-%m-%d")),
+                "latestClose": bar.get("close", 0),
+                "isFnO": False,
+                "isFavorite": False,
+            })
 
         # Also store archived immutable daily snapshot
         daily_archive_key = f"data/daily/{target_date.strftime('%Y-%m-%d')}.json.gz"
         upload_bundle_to_r2(s3_client, bucket_name, records, daily_archive_key, is_immutable=True)
 
         if s3_client:
+            nse_cat_json = json.dumps(symbol_catalog).encode("utf-8")
+            s3_client.put_object(
+                Bucket=bucket_name,
+                Key="data/symbols_nse.json",
+                Body=nse_cat_json,
+                ContentType="application/json",
+                CacheControl="public, max-age=300",
+            )
+
+            # Check if BSE catalog exists to merge into unified symbols.json
+            combined_catalog = list(symbol_catalog)
+            has_bse = False
+            try:
+                bse_obj = s3_client.get_object(Bucket=bucket_name, Key="data/symbols_bse.json")
+                existing_bse = json.loads(bse_obj['Body'].read().decode('utf-8'))
+                if isinstance(existing_bse, list):
+                    has_bse = True
+                    nse_set = set(s['symbol'] for s in combined_catalog)
+                    for item in existing_bse:
+                        if item.get('symbol') not in nse_set:
+                            combined_catalog.append(item)
+                    print(f"[+] Preserved & merged {len(existing_bse)} BSE symbols into data/symbols.json")
+            except Exception:
+                pass
+
+            s3_client.put_object(
+                Bucket=bucket_name,
+                Key="data/symbols.json",
+                Body=json.dumps(combined_catalog).encode("utf-8"),
+                ContentType="application/json",
+                CacheControl="public, max-age=300",
+            )
+
+            manifest_files = {
+                "eodLatest": "data/eod_latest.json.gz",
+                "nseLatest": "data/nse_latest.json.gz",
+                "symbols": "data/symbols.json",
+                "symbolsNse": "data/symbols_nse.json",
+                "daily": daily_archive_key,
+            }
+            if has_bse:
+                manifest_files["bseLatest"] = "data/bse_latest.json.gz"
+                manifest_files["symbolsBse"] = "data/symbols_bse.json"
+
             manifest = {
                 "lastUpdated": datetime.datetime.utcnow().isoformat() + "Z",
                 "date": target_date.strftime("%Y-%m-%d"),
-                "totalSymbols": len(records),
-                "source": "NSE_BHAVCOPY_UNIFIED_MTO",
+                "totalSymbols": len(combined_catalog),
+                "nseSymbolsCount": len(records),
+                "source": "NSE",
+                "market": "NSE_BHAVCOPY_UNIFIED_MTO",
+                "files": manifest_files,
+                "symbols": [s['symbol'] for s in combined_catalog],
                 "classAOperationsCount": 2,
                 "freeTierSafe": True,
             }
@@ -311,7 +440,7 @@ def main():
                 ContentType="application/json",
                 CacheControl="public, max-age=60",
             )
-            print("[+] Successfully synced today's EOD Bhavcopy to Cloudflare R2.")
+            print(f"[+] Successfully synced today's EOD Bhavcopy ({len(symbol_catalog)} symbols) to Cloudflare R2.")
 
 if __name__ == "__main__":
     main()
