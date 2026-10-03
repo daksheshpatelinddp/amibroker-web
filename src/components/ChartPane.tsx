@@ -84,7 +84,12 @@ import {
 } from '../utils/drawingStorage';
 import { adjustCandleHistory } from '../utils/corporateActions';
 
-interface ChartPaneProps {
+export interface OpenSettingsPayload {
+  id: number;
+  tab?: 'candles' | 'ma' | 'overlays' | 'oscillators';
+}
+
+export interface ChartPaneProps {
   candles: CandleBar[];
   symbol: string;
   corporateActions: CorporateAction[];
@@ -92,7 +97,7 @@ interface ChartPaneProps {
   onToggleAdjusted: () => void;
   allMarketData?: Record<string, CandleBar[]>;
   onSelectSymbol?: (symbol: string) => void;
-  openSettingsSignal?: number;
+  openSettingsSignal?: OpenSettingsPayload | number;
   chartTypeSignal?: ChartType;
   subIndicatorSignal?: SubIndicatorType;
 }
@@ -629,7 +634,7 @@ interface SingleChartEngineProps {
   onUpdateSheet: (updated: ChartSheet) => void;
   onSelectSymbol?: (symbol: string) => void;
   availableSymbols: string[];
-  openSettingsTrigger?: number;
+  openSettingsTrigger?: OpenSettingsPayload | number;
 }
 
 const SingleChartEngine: React.FC<SingleChartEngineProps> = ({
@@ -656,13 +661,21 @@ const SingleChartEngine: React.FC<SingleChartEngineProps> = ({
   const [scrollOffset, setScrollOffset] = useState<number>(0); // 0 = latest, >0 = scrolled back in time
   const [visibleBarsCount, setVisibleBarsCount] = useState<number>(110); // number of bars visible
 
-  // Settings Modal State
+  // Settings Modal State & Active Tab
   const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [settingsModalTab, setSettingsModalTab] = useState<'candles' | 'ma' | 'overlays' | 'oscillators'>('ma');
 
   // Open modal if external signal triggered from Main Menu
   useEffect(() => {
-    if (openSettingsTrigger && openSettingsTrigger > 0) {
-      setShowSettingsModal(true);
+    if (openSettingsTrigger) {
+      if (typeof openSettingsTrigger === 'object' && openSettingsTrigger.id > 0) {
+        if (openSettingsTrigger.tab) {
+          setSettingsModalTab(openSettingsTrigger.tab);
+        }
+        setShowSettingsModal(true);
+      } else if (typeof openSettingsTrigger === 'number' && openSettingsTrigger > 0) {
+        setShowSettingsModal(true);
+      }
     }
   }, [openSettingsTrigger]);
 
@@ -738,10 +751,21 @@ const SingleChartEngine: React.FC<SingleChartEngineProps> = ({
     } catch {}
   };
 
+  const handleScrollbarTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    isDraggingScrollbar.current = true;
+    if (e.touches && e.touches[0]) {
+      updateScrollFromClientX(e.touches[0].clientX);
+    }
+  };
+
   const handleScrollbarTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
     if (e.touches && e.touches[0]) {
       updateScrollFromClientX(e.touches[0].clientX);
     }
+  };
+
+  const handleScrollbarTouchEnd = () => {
+    isDraggingScrollbar.current = false;
   };
 
   // Keyboard navigation: 1 candle left/right with Arrow keys
@@ -2464,11 +2488,14 @@ const SingleChartEngine: React.FC<SingleChartEngineProps> = ({
 
         {/* Pan Left: EXACTLY 1 Candle Left (Back in History) */}
         <button
-          onClick={() => setScrollOffset((prev) => Math.min(maxScroll, prev + 1))}
+          onClick={(e) => {
+            e.stopPropagation();
+            setScrollOffset((prev) => Math.min(maxScroll, prev + 1));
+          }}
           title="Move 1 Candle Left (Back in Time)"
-          className="p-1 rounded bg-slate-900 hover:bg-cyan-950 hover:text-cyan-300 active:bg-cyan-900 text-slate-200 border border-slate-700 transition-colors shadow-sm"
+          className="p-1 sm:p-1 rounded bg-slate-900 hover:bg-cyan-950 hover:text-cyan-300 active:bg-cyan-700 active:scale-95 text-slate-200 border border-slate-700 transition-all shadow-sm flex items-center justify-center min-w-[32px] sm:min-w-[26px] h-8 sm:h-6 cursor-pointer"
         >
-          <ChevronLeft className="w-3.5 h-3.5" />
+          <ChevronLeft className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
         </button>
 
         {/* Touch & Mouse Draggable Scrollbar Track */}
@@ -2477,8 +2504,10 @@ const SingleChartEngine: React.FC<SingleChartEngineProps> = ({
           onPointerDown={handleScrollbarPointerDown}
           onPointerMove={handleScrollbarPointerMove}
           onPointerUp={handleScrollbarPointerUp}
+          onTouchStart={handleScrollbarTouchStart}
           onTouchMove={handleScrollbarTouchMove}
-          className="flex-1 h-5 sm:h-4 bg-slate-900 rounded-full relative cursor-pointer border border-slate-800 overflow-hidden touch-none select-none flex items-center"
+          onTouchEnd={handleScrollbarTouchEnd}
+          className="flex-1 h-6 sm:h-4 bg-slate-900 rounded-full relative cursor-pointer border border-slate-800 overflow-hidden touch-none select-none flex items-center"
           title="Touch and drag horizontally to move chart left or right"
         >
           {/* Scrollbar Track background ticks */}
@@ -2490,10 +2519,10 @@ const SingleChartEngine: React.FC<SingleChartEngineProps> = ({
 
           {/* Draggable Scrollbar Thumb */}
           <div
-            className="absolute top-0.5 bottom-0.5 bg-gradient-to-r from-cyan-600 via-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-400 rounded-full transition-colors cursor-grab active:cursor-grabbing border border-cyan-300/60 shadow-[0_0_8px_rgba(6,182,212,0.4)] flex items-center justify-center"
+            className="absolute top-0.5 bottom-0.5 bg-gradient-to-r from-cyan-600 via-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-400 rounded-full transition-colors cursor-grab active:cursor-grabbing border border-cyan-300/60 shadow-[0_0_8px_rgba(6,182,212,0.4)] flex items-center justify-center min-w-[24px]"
             style={{
               left: `${(startIndex / Math.max(1, totalCandles)) * 100}%`,
-              width: `${Math.max(5, (n / Math.max(1, totalCandles)) * 100)}%`,
+              width: `${Math.max(6, (n / Math.max(1, totalCandles)) * 100)}%`,
             }}
           >
             {/* Grip lines */}
@@ -2506,11 +2535,14 @@ const SingleChartEngine: React.FC<SingleChartEngineProps> = ({
 
         {/* Pan Right: EXACTLY 1 Candle Right (Forward in History) */}
         <button
-          onClick={() => setScrollOffset((prev) => Math.max(0, prev - 1))}
+          onClick={(e) => {
+            e.stopPropagation();
+            setScrollOffset((prev) => Math.max(0, prev - 1));
+          }}
           title="Move 1 Candle Right (Forward in Time)"
-          className="p-1 rounded bg-slate-900 hover:bg-cyan-950 hover:text-cyan-300 active:bg-cyan-900 text-slate-200 border border-slate-700 transition-colors shadow-sm"
+          className="p-1 sm:p-1 rounded bg-slate-900 hover:bg-cyan-950 hover:text-cyan-300 active:bg-cyan-700 active:scale-95 text-slate-200 border border-slate-700 transition-all shadow-sm flex items-center justify-center min-w-[32px] sm:min-w-[26px] h-8 sm:h-6 cursor-pointer"
         >
-          <ChevronRight className="w-3.5 h-3.5" />
+          <ChevronRight className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
         </button>
 
         {/* Fast Pan 10 Bars Right */}
@@ -2540,291 +2572,752 @@ const SingleChartEngine: React.FC<SingleChartEngineProps> = ({
       </div>
 
       {/* ===================================================================== */}
-      {/* 5. FULL INDICATORS & MOVING AVERAGES CUSTOMIZATION MODAL              */}
+      {/* 5. FULL INDICATORS, MOVING AVERAGES & CANDLE CUSTOMIZATION MODAL      */}
       {/* ===================================================================== */}
       {showSettingsModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 animate-in fade-in">
-          <div className="w-full max-w-2xl bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-5 max-h-[85vh] overflow-y-auto space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-3 sm:p-4 animate-in fade-in select-none">
+          <div className="w-full max-w-2xl bg-slate-900 border border-slate-700 rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[88vh]">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-4 py-3 bg-slate-950 border-b border-slate-800">
               <div className="flex items-center gap-2">
                 <Settings2 className="w-4 h-4 text-cyan-400" />
-                <h3 className="text-sm font-bold text-white">Customize Indicators & Moving Averages</h3>
+                <h3 className="text-sm font-bold text-white">
+                  Technical Indicator & Chart Customizer
+                  <span className="text-[11px] text-slate-400 font-normal ml-2 font-mono">
+                    [{sheet.name} · {sheet.symbol}]
+                  </span>
+                </h3>
               </div>
               <button
                 onClick={() => setShowSettingsModal(false)}
-                className="text-slate-400 hover:text-white"
+                className="text-slate-400 hover:text-white p-1 rounded hover:bg-slate-800 transition-colors"
               >
                 ✕
               </button>
             </div>
 
-            {/* Custom Moving Averages Section supporting ANY variable */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <span className="font-bold text-white text-xs block">Moving Averages (on Any Variable)</span>
-                  <span className="text-[11px] text-slate-400">
-                    Calculate SMA, EMA, TMA, WMA, DEMA, or Hull MA on Close, High, Low, Volume, etc.
-                  </span>
+            {/* Modal Navigation Tabs */}
+            <div className="flex border-b border-slate-800 bg-slate-950 px-2 pt-1 text-xs font-semibold gap-1 overflow-x-auto no-scrollbar">
+              <button
+                onClick={() => setSettingsModalTab('candles')}
+                className={`py-2 px-3 rounded-t-lg transition-colors flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+                  settingsModalTab === 'candles'
+                    ? 'bg-slate-900 text-purple-300 border-b-2 border-purple-500 font-bold'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <BarChart2 className="w-3.5 h-3.5 text-purple-400" />
+                <span>Candle & Chart Styles</span>
+              </button>
+
+              <button
+                onClick={() => setSettingsModalTab('ma')}
+                className={`py-2 px-3 rounded-t-lg transition-colors flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+                  settingsModalTab === 'ma'
+                    ? 'bg-slate-900 text-cyan-300 border-b-2 border-cyan-500 font-bold'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <TrendingUp className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Moving Averages ({settings.mas.length})</span>
+              </button>
+
+              <button
+                onClick={() => setSettingsModalTab('overlays')}
+                className={`py-2 px-3 rounded-t-lg transition-colors flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+                  settingsModalTab === 'overlays'
+                    ? 'bg-slate-900 text-emerald-300 border-b-2 border-emerald-500 font-bold'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Layers className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Chart Overlays</span>
+              </button>
+
+              <button
+                onClick={() => setSettingsModalTab('oscillators')}
+                className={`py-2 px-3 rounded-t-lg transition-colors flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+                  settingsModalTab === 'oscillators'
+                    ? 'bg-slate-900 text-amber-300 border-b-2 border-amber-500 font-bold'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Activity className="w-3.5 h-3.5 text-amber-400" />
+                <span>Lower Panes & Oscillators</span>
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-4 overflow-y-auto space-y-4 text-xs">
+              {/* TAB 1: CANDLE & CHART STYLES */}
+              {settingsModalTab === 'candles' && (
+                <div className="space-y-4">
+                  <div className="p-3 bg-slate-950 rounded-lg border border-slate-800 space-y-2.5">
+                    <span className="font-bold text-white text-xs block">Select Active Chart Style</span>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      {[
+                        { id: 'candlestick' as ChartType, label: 'Candlestick', desc: 'Real body & wicks' },
+                        { id: 'ohlc_bar' as ChartType, label: 'OHLC Bar', desc: 'Western ticks' },
+                        { id: 'line' as ChartType, label: 'Line Chart', desc: 'Close line graph' },
+                        { id: 'heikin_ashi' as ChartType, label: 'Heikin Ashi', desc: 'Trend smoothed bars' },
+                      ].map((st) => (
+                        <button
+                          key={st.id}
+                          onClick={() => onUpdateSheet({ ...sheet, chartType: st.id })}
+                          className={`p-2.5 rounded-lg border text-left transition-all ${
+                            sheet.chartType === st.id
+                              ? 'bg-purple-950/70 border-purple-500 text-purple-200 shadow-md font-bold'
+                              : 'bg-slate-900 border-slate-800 hover:border-slate-700 text-slate-300'
+                          }`}
+                        >
+                          <div className="text-xs">{st.label}</div>
+                          <div className="text-[10px] text-slate-500 mt-0.5">{st.desc}</div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="p-3 bg-slate-950 rounded-lg border border-slate-800 space-y-3">
+                    <span className="font-bold text-white text-xs block">Volume & Indicator Sub-Panes</span>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <label className="text-slate-400 text-[11px] block">Volume Histogram Mode</label>
+                        <select
+                          value={settings.volumeMode || 'both'}
+                          onChange={(e) =>
+                            onUpdateSheet({
+                              ...sheet,
+                              indicatorSettings: {
+                                ...settings,
+                                volumeMode: e.target.value as VolumePlotMode,
+                              },
+                            })
+                          }
+                          className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-white font-mono text-xs"
+                        >
+                          <option value="both">Both Volume & Delivery Quantity</option>
+                          <option value="volume">Traded Volume Only</option>
+                          <option value="delivery">Delivery Quantity Only</option>
+                          <option value="none">Hide Volume Pane</option>
+                        </select>
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-slate-400 text-[11px] block">Session VWAP Anchor</label>
+                        <div className="flex items-center justify-between p-1.5 bg-slate-900 border border-slate-700 rounded">
+                          <span className="text-slate-300 text-xs">Show VWAP Line</span>
+                          <input
+                            type="checkbox"
+                            checked={settings.showVwap}
+                            onChange={(e) =>
+                              onUpdateSheet({
+                                ...sheet,
+                                indicatorSettings: {
+                                  ...settings,
+                                  showVwap: e.target.checked,
+                                },
+                              })
+                            }
+                            className="rounded text-cyan-500 cursor-pointer"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <button
-                  onClick={() => {
-                    const newMa: CustomMaConfig = {
-                      id: `ma-${Date.now()}`,
-                      name: `MA ${settings.mas.length + 1}`,
-                      type: 'EMA',
-                      sourceField: 'close',
-                      period: 20,
-                      color: '#06b6d4',
-                      strokeWidth: 1.5,
-                      visible: true,
-                    };
-                    onUpdateSheet({
-                      ...sheet,
-                      indicatorSettings: { ...settings, mas: [...settings.mas, newMa] },
-                    });
-                  }}
-                  className="flex items-center gap-1 px-2.5 py-1 rounded bg-cyan-600 hover:bg-cyan-500 text-white font-medium text-xs transition-colors"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Add MA</span>
-                </button>
-              </div>
+              )}
 
-              <div className="space-y-2">
-                {settings.mas.map((ma, idx) => (
-                  <div
-                    key={ma.id}
-                    className="p-2.5 bg-slate-950 rounded border border-slate-800 flex items-center gap-2 flex-wrap text-[11px]"
-                  >
+              {/* TAB 2: MOVING AVERAGES */}
+              {settingsModalTab === 'ma' && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="font-bold text-white text-xs block">Moving Averages (on Any Variable)</span>
+                      <span className="text-[11px] text-slate-400">
+                        Calculate SMA, EMA, TMA, WMA, DEMA, or Hull MA on Close, High, Low, Volume, Delivery, etc.
+                      </span>
+                    </div>
                     <button
                       onClick={() => {
-                        const updated = [...settings.mas];
-                        updated[idx].visible = !updated[idx].visible;
-                        onUpdateSheet({ ...sheet, indicatorSettings: { ...settings, mas: updated } });
+                        const newMa: CustomMaConfig = {
+                          id: `ma-${Date.now()}`,
+                          name: `MA ${settings.mas.length + 1}`,
+                          type: 'EMA',
+                          sourceField: 'close',
+                          period: 20,
+                          color: '#06b6d4',
+                          strokeWidth: 1.5,
+                          visible: true,
+                        };
+                        onUpdateSheet({
+                          ...sheet,
+                          indicatorSettings: { ...settings, mas: [...settings.mas, newMa] },
+                        });
                       }}
-                      className="text-slate-400 hover:text-white"
+                      className="flex items-center gap-1 px-2.5 py-1 rounded bg-cyan-600 hover:bg-cyan-500 text-white font-medium text-xs transition-colors cursor-pointer"
                     >
-                      {ma.visible ? <Eye className="w-3.5 h-3.5 text-cyan-400" /> : <EyeOff className="w-3.5 h-3.5" />}
-                    </button>
-
-                    <input
-                      type="text"
-                      value={ma.name}
-                      onChange={(e) => {
-                        const updated = [...settings.mas];
-                        updated[idx].name = e.target.value;
-                        onUpdateSheet({ ...sheet, indicatorSettings: { ...settings, mas: updated } });
-                      }}
-                      className="w-24 bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-white"
-                    />
-
-                    {/* MA Type */}
-                    <select
-                      value={ma.type}
-                      onChange={(e) => {
-                        const updated = [...settings.mas];
-                        updated[idx].type = e.target.value as MovingAverageType;
-                        onUpdateSheet({ ...sheet, indicatorSettings: { ...settings, mas: updated } });
-                      }}
-                      className="bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-white font-mono"
-                    >
-                      <option value="SMA">SMA</option>
-                      <option value="EMA">EMA</option>
-                      <option value="TMA">TMA</option>
-                      <option value="WMA">WMA</option>
-                      <option value="DEMA">DEMA</option>
-                      <option value="HULL">Hull MA</option>
-                    </select>
-
-                    {/* Source Field: Close, High, Low, Volume, etc. */}
-                    <select
-                      value={ma.sourceField || 'close'}
-                      onChange={(e) => {
-                        const updated = [...settings.mas];
-                        updated[idx].sourceField = e.target.value as MovingAverageSource;
-                        onUpdateSheet({ ...sheet, indicatorSettings: { ...settings, mas: updated } });
-                      }}
-                      className="bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-cyan-300 font-mono"
-                      title="Variable to calculate MA on"
-                    >
-                      <option value="close">On: Close</option>
-                      <option value="open">On: Open</option>
-                      <option value="high">On: High</option>
-                      <option value="low">On: Low</option>
-                      <option value="volume">On: Volume</option>
-                      <option value="deliveryQty">On: Delivery Qty</option>
-                      <option value="hl2">On: (H+L)/2</option>
-                      <option value="hlc3">On: (H+L+C)/3</option>
-                    </select>
-
-                    {/* Period */}
-                    <div className="flex items-center gap-1">
-                      <span className="text-slate-400">Period:</span>
-                      <input
-                        type="number"
-                        min={1}
-                        value={ma.period}
-                        onChange={(e) => {
-                          const updated = [...settings.mas];
-                          updated[idx].period = Number(e.target.value) || 1;
-                          onUpdateSheet({ ...sheet, indicatorSettings: { ...settings, mas: updated } });
-                        }}
-                        className="w-16 bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-white font-mono"
-                      />
-                    </div>
-
-                    {/* Color */}
-                    <div className="flex items-center gap-1">
-                      <input
-                        type="color"
-                        value={ma.color}
-                        onChange={(e) => {
-                          const updated = [...settings.mas];
-                          updated[idx].color = e.target.value;
-                          onUpdateSheet({ ...sheet, indicatorSettings: { ...settings, mas: updated } });
-                        }}
-                        className="w-6 h-6 bg-transparent border-0 cursor-pointer"
-                      />
-                    </div>
-
-                    <button
-                      onClick={() => {
-                        const updated = settings.mas.filter((m) => m.id !== ma.id);
-                        onUpdateSheet({ ...sheet, indicatorSettings: { ...settings, mas: updated } });
-                      }}
-                      className="ml-auto text-rose-400 hover:text-rose-200"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Add MA</span>
                     </button>
                   </div>
-                ))}
-              </div>
+
+                  <div className="space-y-2">
+                    {settings.mas.map((ma, idx) => (
+                      <div
+                        key={ma.id}
+                        className="p-2.5 bg-slate-950 rounded border border-slate-800 flex items-center gap-2 flex-wrap text-[11px]"
+                      >
+                        <button
+                          onClick={() => {
+                            const updated = [...settings.mas];
+                            updated[idx].visible = !updated[idx].visible;
+                            onUpdateSheet({ ...sheet, indicatorSettings: { ...settings, mas: updated } });
+                          }}
+                          className="text-slate-400 hover:text-white"
+                        >
+                          {ma.visible ? <Eye className="w-3.5 h-3.5 text-cyan-400" /> : <EyeOff className="w-3.5 h-3.5" />}
+                        </button>
+
+                        <input
+                          type="text"
+                          value={ma.name}
+                          onChange={(e) => {
+                            const updated = [...settings.mas];
+                            updated[idx].name = e.target.value;
+                            onUpdateSheet({ ...sheet, indicatorSettings: { ...settings, mas: updated } });
+                          }}
+                          className="w-24 bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-white"
+                        />
+
+                        {/* MA Type */}
+                        <select
+                          value={ma.type}
+                          onChange={(e) => {
+                            const updated = [...settings.mas];
+                            updated[idx].type = e.target.value as MovingAverageType;
+                            onUpdateSheet({ ...sheet, indicatorSettings: { ...settings, mas: updated } });
+                          }}
+                          className="bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-white font-mono"
+                        >
+                          <option value="SMA">SMA</option>
+                          <option value="EMA">EMA</option>
+                          <option value="TMA">TMA</option>
+                          <option value="WMA">WMA</option>
+                          <option value="DEMA">DEMA</option>
+                          <option value="HULL">Hull MA</option>
+                        </select>
+
+                        {/* Source Field */}
+                        <select
+                          value={ma.sourceField || 'close'}
+                          onChange={(e) => {
+                            const updated = [...settings.mas];
+                            updated[idx].sourceField = e.target.value as MovingAverageSource;
+                            onUpdateSheet({ ...sheet, indicatorSettings: { ...settings, mas: updated } });
+                          }}
+                          className="bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-cyan-300 font-mono"
+                        >
+                          <option value="close">On: Close</option>
+                          <option value="open">On: Open</option>
+                          <option value="high">On: High</option>
+                          <option value="low">On: Low</option>
+                          <option value="volume">On: Volume</option>
+                          <option value="deliveryQty">On: Delivery Qty</option>
+                          <option value="hl2">On: (H+L)/2</option>
+                          <option value="hlc3">On: (H+L+C)/3</option>
+                        </select>
+
+                        {/* Period */}
+                        <div className="flex items-center gap-1">
+                          <span className="text-slate-400">Period:</span>
+                          <input
+                            type="number"
+                            min={1}
+                            value={ma.period}
+                            onChange={(e) => {
+                              const updated = [...settings.mas];
+                              updated[idx].period = Number(e.target.value) || 1;
+                              onUpdateSheet({ ...sheet, indicatorSettings: { ...settings, mas: updated } });
+                            }}
+                            className="w-16 bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-white font-mono"
+                          />
+                        </div>
+
+                        {/* Color */}
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="color"
+                            value={ma.color}
+                            onChange={(e) => {
+                              const updated = [...settings.mas];
+                              updated[idx].color = e.target.value;
+                              onUpdateSheet({ ...sheet, indicatorSettings: { ...settings, mas: updated } });
+                            }}
+                            className="w-6 h-6 bg-transparent border-0 cursor-pointer"
+                          />
+                        </div>
+
+                        <button
+                          onClick={() => {
+                            const updated = settings.mas.filter((m) => m.id !== ma.id);
+                            onUpdateSheet({ ...sheet, indicatorSettings: { ...settings, mas: updated } });
+                          }}
+                          className="ml-auto text-rose-400 hover:text-rose-200 p-1"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 3: CHART OVERLAYS */}
+              {settingsModalTab === 'overlays' && (
+                <div className="space-y-3">
+                  {/* Bollinger Bands */}
+                  <div className="p-3 bg-slate-950 rounded-lg border border-slate-800 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-white text-xs">Bollinger Bands</span>
+                      <input
+                        type="checkbox"
+                        checked={settings.bollinger.enabled}
+                        onChange={(e) =>
+                          onUpdateSheet({
+                            ...sheet,
+                            indicatorSettings: {
+                              ...settings,
+                              bollinger: { ...settings.bollinger, enabled: e.target.checked },
+                            },
+                          })
+                        }
+                        className="rounded text-cyan-500 cursor-pointer"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-slate-400 text-[10px] block mb-1">Period</label>
+                        <input
+                          type="number"
+                          value={settings.bollinger.period}
+                          onChange={(e) =>
+                            onUpdateSheet({
+                              ...sheet,
+                              indicatorSettings: {
+                                ...settings,
+                                bollinger: { ...settings.bollinger, period: Number(e.target.value) || 20 },
+                              },
+                            })
+                          }
+                          className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white font-mono text-xs"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-slate-400 text-[10px] block mb-1">StdDev Multiplier</label>
+                        <input
+                          type="number"
+                          step="0.1"
+                          value={settings.bollinger.stdDev}
+                          onChange={(e) =>
+                            onUpdateSheet({
+                              ...sheet,
+                              indicatorSettings: {
+                                ...settings,
+                                bollinger: { ...settings.bollinger, stdDev: Number(e.target.value) || 2 },
+                              },
+                            })
+                          }
+                          className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white font-mono text-xs"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Supertrend */}
+                  <div className="p-3 bg-slate-950 rounded-lg border border-slate-800 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-white text-xs">Supertrend</span>
+                      <input
+                        type="checkbox"
+                        checked={settings.supertrend.enabled}
+                        onChange={(e) =>
+                          onUpdateSheet({
+                            ...sheet,
+                            indicatorSettings: {
+                              ...settings,
+                              supertrend: { ...settings.supertrend, enabled: e.target.checked },
+                            },
+                          })
+                        }
+                        className="rounded text-cyan-500 cursor-pointer"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-slate-400 text-[10px] block mb-1">ATR Period</label>
+                        <input
+                          type="number"
+                          value={settings.supertrend.period}
+                          onChange={(e) =>
+                            onUpdateSheet({
+                              ...sheet,
+                              indicatorSettings: {
+                                ...settings,
+                                supertrend: { ...settings.supertrend, period: Number(e.target.value) || 10 },
+                              },
+                            })
+                          }
+                          className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white font-mono text-xs"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-slate-400 text-[10px] block mb-1">Multiplier Factor</label>
+                        <input
+                          type="number"
+                          step="0.1"
+                          value={settings.supertrend.multiplier}
+                          onChange={(e) =>
+                            onUpdateSheet({
+                              ...sheet,
+                              indicatorSettings: {
+                                ...settings,
+                                supertrend: { ...settings.supertrend, multiplier: Number(e.target.value) || 3 },
+                              },
+                            })
+                          }
+                          className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white font-mono text-xs"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* ATR Trailing Stop (Chandelier) */}
+                  <div className="p-3 bg-slate-950 rounded-lg border border-slate-800 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="font-bold text-white text-xs block">ATR Trailing Stop Loss (Chandelier)</span>
+                        <span className="text-[10px] text-slate-400">Ratchet stop trailing high-water mark</span>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={settings.atrTrailingStop.enabled}
+                        onChange={(e) =>
+                          onUpdateSheet({
+                            ...sheet,
+                            indicatorSettings: {
+                              ...settings,
+                              atrTrailingStop: { ...settings.atrTrailingStop, enabled: e.target.checked },
+                            },
+                          })
+                        }
+                        className="rounded text-cyan-500 cursor-pointer"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-slate-400 text-[10px] block mb-1">Lookback Period</label>
+                        <input
+                          type="number"
+                          value={settings.atrTrailingStop.period}
+                          onChange={(e) =>
+                            onUpdateSheet({
+                              ...sheet,
+                              indicatorSettings: {
+                                ...settings,
+                                atrTrailingStop: { ...settings.atrTrailingStop, period: Number(e.target.value) || 14 },
+                              },
+                            })
+                          }
+                          className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white font-mono text-xs"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-slate-400 text-[10px] block mb-1">ATR Multiplier</label>
+                        <input
+                          type="number"
+                          step="0.1"
+                          value={settings.atrTrailingStop.multiplier}
+                          onChange={(e) =>
+                            onUpdateSheet({
+                              ...sheet,
+                              indicatorSettings: {
+                                ...settings,
+                                atrTrailingStop: { ...settings.atrTrailingStop, multiplier: Number(e.target.value) || 3 },
+                              },
+                            })
+                          }
+                          className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white font-mono text-xs"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Parabolic SAR & Donchian */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="p-3 bg-slate-950 rounded-lg border border-slate-800 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-white text-xs">Parabolic SAR</span>
+                        <input
+                          type="checkbox"
+                          checked={settings.parabolicSar?.enabled || false}
+                          onChange={(e) =>
+                            onUpdateSheet({
+                              ...sheet,
+                              indicatorSettings: {
+                                ...settings,
+                                parabolicSar: {
+                                  enabled: e.target.checked,
+                                  acceleration: settings.parabolicSar?.acceleration || 0.02,
+                                  maximum: settings.parabolicSar?.maximum || 0.2,
+                                  color: '#f59e0b',
+                                },
+                              },
+                            })
+                          }
+                          className="rounded text-cyan-500 cursor-pointer"
+                        />
+                      </div>
+                      <div className="text-[10px] text-slate-400">Step: 0.02 · Max: 0.20</div>
+                    </div>
+
+                    <div className="p-3 bg-slate-950 rounded-lg border border-slate-800 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-white text-xs">Donchian Channels</span>
+                        <input
+                          type="checkbox"
+                          checked={settings.donchian?.enabled || false}
+                          onChange={(e) =>
+                            onUpdateSheet({
+                              ...sheet,
+                              indicatorSettings: {
+                                ...settings,
+                                donchian: {
+                                  enabled: e.target.checked,
+                                  period: settings.donchian?.period || 20,
+                                  color: '#06b6d4',
+                                },
+                              },
+                            })
+                          }
+                          className="rounded text-cyan-500 cursor-pointer"
+                        />
+                      </div>
+                      <div className="text-[10px] text-slate-400">Lookback Period: 20-bar High-Low breakout</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 4: LOWER PANES & OSCILLATORS */}
+              {settingsModalTab === 'oscillators' && (
+                <div className="space-y-4">
+                  <div className="p-3 bg-slate-950 rounded-lg border border-slate-800 space-y-2">
+                    <label className="font-bold text-white text-xs block">Active Lower Oscillator Pane</label>
+                    <select
+                      value={sheet.subIndicator}
+                      onChange={(e) => onUpdateSheet({ ...sheet, subIndicator: e.target.value as SubIndicatorType })}
+                      className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-cyan-300 font-mono text-xs"
+                    >
+                      <option value="none">None (Full Price Chart)</option>
+                      <option value="rsi">RSI - Relative Strength Index</option>
+                      <option value="macd">MACD - Moving Average Convergence Divergence</option>
+                      <option value="stochastic">Stochastic Oscillator (%K, %D)</option>
+                      <option value="adx">ADX / Directional Movement Index</option>
+                      <option value="atr">ATR - Average True Range</option>
+                      <option value="cci">CCI - Commodity Channel Index</option>
+                      <option value="williams_r">Williams %R Momentum</option>
+                      <option value="mfi">MFI - Money Flow Index</option>
+                      <option value="obv">OBV - On Balance Volume</option>
+                      <option value="roc">ROC - Rate of Change</option>
+                      <option value="delivery_trend">Delivery % Trend Tracker</option>
+                    </select>
+                  </div>
+
+                  {/* RSI Config */}
+                  <div className="p-3 bg-slate-950 rounded-lg border border-slate-800 space-y-2">
+                    <span className="font-bold text-white text-xs block">RSI Parameters</span>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div>
+                        <label className="text-slate-400 text-[10px] block mb-1">Period</label>
+                        <input
+                          type="number"
+                          value={settings.rsi.period}
+                          onChange={(e) =>
+                            onUpdateSheet({
+                              ...sheet,
+                              indicatorSettings: {
+                                ...settings,
+                                rsi: { ...settings.rsi, period: Number(e.target.value) || 14 },
+                              },
+                            })
+                          }
+                          className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-cyan-300 font-mono text-xs"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-slate-400 text-[10px] block mb-1">Overbought</label>
+                        <input
+                          type="number"
+                          value={settings.rsi.overbought}
+                          onChange={(e) =>
+                            onUpdateSheet({
+                              ...sheet,
+                              indicatorSettings: {
+                                ...settings,
+                                rsi: { ...settings.rsi, overbought: Number(e.target.value) || 70 },
+                              },
+                            })
+                          }
+                          className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-rose-400 font-mono text-xs"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-slate-400 text-[10px] block mb-1">Oversold</label>
+                        <input
+                          type="number"
+                          value={settings.rsi.oversold}
+                          onChange={(e) =>
+                            onUpdateSheet({
+                              ...sheet,
+                              indicatorSettings: {
+                                ...settings,
+                                rsi: { ...settings.rsi, oversold: Number(e.target.value) || 30 },
+                              },
+                            })
+                          }
+                          className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-emerald-400 font-mono text-xs"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* MACD Config */}
+                  <div className="p-3 bg-slate-950 rounded-lg border border-slate-800 space-y-2">
+                    <span className="font-bold text-white text-xs block">MACD Parameters</span>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div>
+                        <label className="text-slate-400 text-[10px] block mb-1">Fast Period</label>
+                        <input
+                          type="number"
+                          value={settings.macd.fastPeriod}
+                          onChange={(e) =>
+                            onUpdateSheet({
+                              ...sheet,
+                              indicatorSettings: {
+                                ...settings,
+                                macd: { ...settings.macd, fastPeriod: Number(e.target.value) || 12 },
+                              },
+                            })
+                          }
+                          className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-cyan-300 font-mono text-xs"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-slate-400 text-[10px] block mb-1">Slow Period</label>
+                        <input
+                          type="number"
+                          value={settings.macd.slowPeriod}
+                          onChange={(e) =>
+                            onUpdateSheet({
+                              ...sheet,
+                              indicatorSettings: {
+                                ...settings,
+                                macd: { ...settings.macd, slowPeriod: Number(e.target.value) || 26 },
+                              },
+                            })
+                          }
+                          className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-amber-300 font-mono text-xs"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-slate-400 text-[10px] block mb-1">Signal Period</label>
+                        <input
+                          type="number"
+                          value={settings.macd.signalPeriod}
+                          onChange={(e) =>
+                            onUpdateSheet({
+                              ...sheet,
+                              indicatorSettings: {
+                                ...settings,
+                                macd: { ...settings.macd, signalPeriod: Number(e.target.value) || 9 },
+                              },
+                            })
+                          }
+                          className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-purple-300 font-mono text-xs"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Stochastic Config */}
+                  <div className="p-3 bg-slate-950 rounded-lg border border-slate-800 space-y-2">
+                    <span className="font-bold text-white text-xs block">Stochastic Parameters</span>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div>
+                        <label className="text-slate-400 text-[10px] block mb-1">%K Period</label>
+                        <input
+                          type="number"
+                          value={settings.stochastic.kPeriod}
+                          onChange={(e) =>
+                            onUpdateSheet({
+                              ...sheet,
+                              indicatorSettings: {
+                                ...settings,
+                                stochastic: { ...settings.stochastic, kPeriod: Number(e.target.value) || 14 },
+                              },
+                            })
+                          }
+                          className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white font-mono text-xs"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-slate-400 text-[10px] block mb-1">%D Period</label>
+                        <input
+                          type="number"
+                          value={settings.stochastic.dPeriod}
+                          onChange={(e) =>
+                            onUpdateSheet({
+                              ...sheet,
+                              indicatorSettings: {
+                                ...settings,
+                                stochastic: { ...settings.stochastic, dPeriod: Number(e.target.value) || 3 },
+                              },
+                            })
+                          }
+                          className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white font-mono text-xs"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-slate-400 text-[10px] block mb-1">Slowing</label>
+                        <input
+                          type="number"
+                          value={settings.stochastic.slowing}
+                          onChange={(e) =>
+                            onUpdateSheet({
+                              ...sheet,
+                              indicatorSettings: {
+                                ...settings,
+                                stochastic: { ...settings.stochastic, slowing: Number(e.target.value) || 3 },
+                              },
+                            })
+                          }
+                          className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white font-mono text-xs"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
-            {/* ATR Trailing Stoploss Settings */}
-            <div className="p-3 bg-slate-950 rounded border border-slate-800">
-              <div className="flex items-center justify-between mb-2">
-                <div>
-                  <span className="font-bold text-white text-xs block">ATR Trailing Stop Loss (Chandelier)</span>
-                  <span className="text-[11px] text-slate-400">Ratchet stop trailing high-water mark</span>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={settings.atrTrailingStop.enabled}
-                  onChange={(e) =>
-                    onUpdateSheet({
-                      ...sheet,
-                      indicatorSettings: {
-                        ...settings,
-                        atrTrailingStop: { ...settings.atrTrailingStop, enabled: e.target.checked },
-                      },
-                    })
-                  }
-                  className="rounded text-cyan-500"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-slate-400 text-[10px] block mb-1">Lookback Period</label>
-                  <input
-                    type="number"
-                    value={settings.atrTrailingStop.period}
-                    onChange={(e) =>
-                      onUpdateSheet({
-                        ...sheet,
-                        indicatorSettings: {
-                          ...settings,
-                          atrTrailingStop: { ...settings.atrTrailingStop, period: Number(e.target.value) || 14 },
-                        },
-                      })
-                    }
-                    className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="text-slate-400 text-[10px] block mb-1">ATR Multiplier</label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={settings.atrTrailingStop.multiplier}
-                    onChange={(e) =>
-                      onUpdateSheet({
-                        ...sheet,
-                        indicatorSettings: {
-                          ...settings,
-                          atrTrailingStop: { ...settings.atrTrailingStop, multiplier: Number(e.target.value) || 3 },
-                        },
-                      })
-                    }
-                    className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white font-mono"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Bollinger Bands Settings */}
-            <div className="p-3 bg-slate-950 rounded border border-slate-800">
-              <div className="flex items-center justify-between mb-2">
-                <span className="font-bold text-white text-xs">Bollinger Bands</span>
-                <input
-                  type="checkbox"
-                  checked={settings.bollinger.enabled}
-                  onChange={(e) =>
-                    onUpdateSheet({
-                      ...sheet,
-                      indicatorSettings: {
-                        ...settings,
-                        bollinger: { ...settings.bollinger, enabled: e.target.checked },
-                      },
-                    })
-                  }
-                  className="rounded text-cyan-500"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-slate-400 text-[10px] block mb-1">Period</label>
-                  <input
-                    type="number"
-                    value={settings.bollinger.period}
-                    onChange={(e) =>
-                      onUpdateSheet({
-                        ...sheet,
-                        indicatorSettings: {
-                          ...settings,
-                          bollinger: { ...settings.bollinger, period: Number(e.target.value) || 20 },
-                        },
-                      })
-                    }
-                    className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="text-slate-400 text-[10px] block mb-1">StdDev Multiplier</label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={settings.bollinger.stdDev}
-                    onChange={(e) =>
-                      onUpdateSheet({
-                        ...sheet,
-                        indicatorSettings: {
-                          ...settings,
-                          bollinger: { ...settings.bollinger, stdDev: Number(e.target.value) || 2 },
-                        },
-                      })
-                    }
-                    className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white font-mono"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="flex justify-end pt-2">
+            {/* Modal Footer */}
+            <div className="px-4 py-3 bg-slate-950 border-t border-slate-800 flex items-center justify-between">
+              <span className="text-[11px] text-slate-500 font-mono">
+                Changes apply instantly in realtime
+              </span>
               <button
                 onClick={() => setShowSettingsModal(false)}
-                className="px-4 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded font-medium text-xs transition-colors"
+                className="px-4 py-1.5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white rounded font-bold text-xs transition-all shadow-md cursor-pointer"
               >
                 Done
               </button>

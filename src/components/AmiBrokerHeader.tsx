@@ -29,7 +29,7 @@ import {
   Settings2,
 } from 'lucide-react';
 import { STOCK_UNIVERSE } from '../utils/sampleData';
-import { ChartType, SubIndicatorType } from '../types/market';
+import { ChartType, SubIndicatorType, StockMetadata } from '../types/market';
 
 export type ActiveTab =
   | 'chart'
@@ -46,14 +46,18 @@ interface AmiBrokerHeaderProps {
   selectedSymbol: string;
   onSelectSymbol: (symbol: string) => void;
   availableSymbols: string[];
+  stockUniverse?: StockMetadata[];
   isAdjusted: boolean;
   onToggleAdjusted: () => void;
   onOpenCloudGuide: () => void;
   onOpenCategoriesWatchlists: () => void;
   onOpenUserGuide: () => void;
-  onOpenIndicatorCustomizer?: () => void;
+  onOpenIndicatorCustomizer?: (tab?: 'candles' | 'ma' | 'overlays' | 'oscillators') => void;
   onSelectChartStyle?: (style: ChartType) => void;
   onSelectSubIndicator?: (indicator: SubIndicatorType) => void;
+  onOpenR2Modal?: () => void;
+  isR2Connected?: boolean;
+  r2SymbolsCount?: number;
 }
 
 export const AmiBrokerHeader: React.FC<AmiBrokerHeaderProps> = ({
@@ -62,6 +66,7 @@ export const AmiBrokerHeader: React.FC<AmiBrokerHeaderProps> = ({
   selectedSymbol,
   onSelectSymbol,
   availableSymbols,
+  stockUniverse = STOCK_UNIVERSE,
   isAdjusted,
   onToggleAdjusted,
   onOpenCloudGuide,
@@ -70,9 +75,13 @@ export const AmiBrokerHeader: React.FC<AmiBrokerHeaderProps> = ({
   onOpenIndicatorCustomizer,
   onSelectChartStyle,
   onSelectSubIndicator,
+  onOpenR2Modal,
+  isR2Connected = false,
+  r2SymbolsCount,
 }) => {
-  // Search state
+  // Search & Market filter state
   const [searchQuery, setSearchQuery] = useState('');
+  const [marketFilter, setMarketFilter] = useState<'ALL' | 'NSE' | 'BSE' | 'FNO'>('ALL');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isMainMenuOpen, setIsMainMenuOpen] = useState(false);
   const [expandedSubmenu, setExpandedSubmenu] = useState<string | null>('workspaces');
@@ -94,23 +103,63 @@ export const AmiBrokerHeader: React.FC<AmiBrokerHeaderProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Filter available symbols matching search query
-  const searchResults = React.useMemo(() => {
-    if (!searchQuery.trim()) {
-      return availableSymbols.slice(0, 8);
+  // Map universe by symbol for fast lookup
+  const universeMap = React.useMemo(() => {
+    const map = new Map<string, StockMetadata>();
+    for (const s of stockUniverse) {
+      map.set(s.symbol, s);
     }
-    const q = searchQuery.trim().toUpperCase();
-    return availableSymbols.filter((sym) => {
-      if (sym.toUpperCase().includes(q)) return true;
-      const meta = STOCK_UNIVERSE.find((s) => s.symbol === sym);
-      if (meta && (meta.name.toUpperCase().includes(q) || meta.sector.toUpperCase().includes(q))) {
-        return true;
-      }
-      return false;
-    });
-  }, [searchQuery, availableSymbols]);
+    return map;
+  }, [stockUniverse]);
 
-  const currentMeta = STOCK_UNIVERSE.find((s) => s.symbol === selectedSymbol);
+  // Combined pool of all available symbols across universe and stored data
+  const allKnownSymbols = React.useMemo(() => {
+    const set = new Set([...stockUniverse.map((s) => s.symbol), ...availableSymbols]);
+    return Array.from(set);
+  }, [stockUniverse, availableSymbols]);
+
+  // Filter available symbols matching search query and market segment
+  const searchResults = React.useMemo(() => {
+    const q = searchQuery.trim().toUpperCase();
+
+    const filterBySegment = (sym: string) => {
+      if (marketFilter === 'ALL') return true;
+      const meta = universeMap.get(sym);
+      const isBse = meta?.market === 'BSE' || (sym.startsWith('5') && /^\d+$/.test(sym));
+      if (marketFilter === 'BSE') return isBse;
+      if (marketFilter === 'NSE') return !isBse;
+      if (marketFilter === 'FNO') return Boolean(meta?.isFnO);
+      return true;
+    };
+
+    if (!q) {
+      return allKnownSymbols.filter(filterBySegment).slice(0, 60);
+    }
+
+    const matches: string[] = [];
+    for (const sym of allKnownSymbols) {
+      if (!filterBySegment(sym)) continue;
+
+      if (sym.includes(q)) {
+        matches.push(sym);
+      } else {
+        const meta = universeMap.get(sym);
+        if (
+          meta &&
+          (meta.name.toUpperCase().includes(q) ||
+            meta.sector.toUpperCase().includes(q) ||
+            (meta.group && meta.group.toUpperCase().includes(q)) ||
+            (meta.scripCode && meta.scripCode.includes(q)))
+        ) {
+          matches.push(sym);
+        }
+      }
+      if (matches.length >= 150) break;
+    }
+    return matches;
+  }, [searchQuery, marketFilter, allKnownSymbols, universeMap]);
+
+  const currentMeta = universeMap.get(selectedSymbol) || STOCK_UNIVERSE.find((s) => s.symbol === selectedSymbol);
 
   const toggleSubmenu = (menuId: string) => {
     setExpandedSubmenu(expandedSubmenu === menuId ? null : menuId);
@@ -146,13 +195,47 @@ export const AmiBrokerHeader: React.FC<AmiBrokerHeaderProps> = ({
 
           {/* Autocomplete Dropdown */}
           {isSearchOpen && (
-            <div className="absolute left-0 mt-1 w-64 bg-slate-900 border border-slate-700 rounded-lg shadow-2xl py-1 z-50 max-h-64 overflow-y-auto font-mono text-[11px]">
-              <div className="px-2.5 py-1 text-[10px] uppercase text-slate-500 font-semibold border-b border-slate-800">
-                NSE Equity Universe ({searchResults.length})
+            <div className="absolute left-0 mt-1 w-80 sm:w-96 bg-slate-900 border border-slate-700 rounded-lg shadow-2xl py-1 z-50 max-h-96 overflow-y-auto font-mono text-[11px]">
+              <div className="px-2.5 py-1.5 text-[10px] uppercase text-cyan-400 font-semibold border-b border-slate-800 flex items-center justify-between bg-slate-950/50">
+                <span className="flex items-center gap-1">
+                  <Cloud className="w-3 h-3 text-cyan-400" />
+                  <span>Universe ({allKnownSymbols.length.toLocaleString()} Symbols)</span>
+                </span>
+                <span className="text-emerald-400 font-normal">Auto-Indexed from R2</span>
               </div>
+
+              {/* Segment filter pills: ALL / NSE / BSE / F&O */}
+              <div className="flex items-center gap-1 px-2 py-1.5 border-b border-slate-800 bg-slate-900/90 sticky top-0 z-10">
+                {(['ALL', 'NSE', 'BSE', 'FNO'] as const).map((seg) => (
+                  <button
+                    key={seg}
+                    onClick={() => setMarketFilter(seg)}
+                    className={`px-2 py-0.5 rounded text-[10px] font-sans font-bold transition-colors ${
+                      marketFilter === seg
+                        ? 'bg-cyan-500 text-slate-950 shadow-sm'
+                        : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                    }`}
+                  >
+                    {seg === 'FNO' ? 'F&O' : seg}
+                  </button>
+                ))}
+                {onOpenR2Modal && (
+                  <button
+                    onClick={() => {
+                      setIsSearchOpen(false);
+                      onOpenR2Modal();
+                    }}
+                    className="ml-auto text-[10px] text-cyan-400 hover:underline flex items-center gap-0.5 font-sans"
+                  >
+                    <RefreshCw className="w-2.5 h-2.5" />
+                    <span>Sync R2</span>
+                  </button>
+                )}
+              </div>
+
               {searchResults.length === 0 ? (
-                <div className="p-2 text-center">
-                  <div className="text-slate-400 text-[10px] mb-1.5">No loaded symbol for &quot;{searchQuery}&quot;</div>
+                <div className="p-3 text-center">
+                  <div className="text-slate-400 text-[10px] mb-1.5">No loaded symbol matching &quot;{searchQuery}&quot;</div>
                   <button
                     onClick={() => {
                       const cleanSym = searchQuery.trim().toUpperCase();
@@ -162,15 +245,16 @@ export const AmiBrokerHeader: React.FC<AmiBrokerHeaderProps> = ({
                         setSearchQuery('');
                       }
                     }}
-                    className="w-full py-1.5 px-2 rounded bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold text-[11px] shadow transition-all"
+                    className="w-full py-1.5 px-2 rounded bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold text-[11px] shadow transition-all cursor-pointer"
                   >
                     + Add & Load &quot;{searchQuery.trim().toUpperCase()}&quot; (Full History)
                   </button>
                 </div>
               ) : (
                 searchResults.map((sym) => {
-                  const meta = STOCK_UNIVERSE.find((s) => s.symbol === sym);
+                  const meta = universeMap.get(sym);
                   const isCur = sym === selectedSymbol;
+                  const isBse = meta?.market === 'BSE' || (sym.startsWith('5') && /^\d+$/.test(sym));
                   return (
                     <button
                       key={sym}
@@ -179,20 +263,38 @@ export const AmiBrokerHeader: React.FC<AmiBrokerHeaderProps> = ({
                         setIsSearchOpen(false);
                         setSearchQuery('');
                       }}
-                      className={`w-full text-left px-3 py-1.5 flex items-center justify-between transition-colors ${
+                      className={`w-full text-left px-3 py-1.5 flex items-center justify-between transition-colors cursor-pointer border-b border-slate-800/30 ${
                         isCur ? 'bg-cyan-950/80 text-cyan-300 font-bold' : 'hover:bg-slate-800 text-slate-200'
                       }`}
                     >
-                      <div>
+                      <div className="truncate mr-2">
                         <div className="font-bold flex items-center gap-1.5">
                           <span>{sym}</span>
-                          {isCur && <span className="text-[9px] text-cyan-400">● Active</span>}
+                          <span
+                            className={`text-[9px] px-1 py-0.2 rounded font-sans font-semibold ${
+                              isBse
+                                ? 'bg-amber-950 text-amber-300 border border-amber-800/60'
+                                : 'bg-cyan-950 text-cyan-300 border border-cyan-800/60'
+                            }`}
+                          >
+                            {isBse ? 'BSE' : 'NSE'}
+                          </span>
+                          {meta?.isFnO && (
+                            <span className="text-[9px] px-1 py-0.2 rounded bg-purple-950 text-purple-300 border border-purple-800/60 font-sans font-semibold">
+                              F&O
+                            </span>
+                          )}
+                          {isCur && <span className="text-[9px] text-emerald-400">● Active</span>}
                         </div>
-                        {meta && <div className="text-[10px] text-slate-400 truncate max-w-[150px]">{meta.name}</div>}
+                        {meta && (
+                          <div className="text-[10px] text-slate-400 truncate max-w-[220px]">
+                            {meta.name}
+                          </div>
+                        )}
                       </div>
                       {meta && (
-                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">
-                          {meta.sector}
+                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 shrink-0">
+                          {meta.sector || meta.group}
                         </span>
                       )}
                     </button>
@@ -300,6 +402,29 @@ export const AmiBrokerHeader: React.FC<AmiBrokerHeaderProps> = ({
       {/* RIGHT SIDE: Action Buttons, Main Menu on Right & "AB" Logo on Right   */}
       {/* ===================================================================== */}
       <div className="flex items-center gap-2">
+        {/* Cloudflare R2 Sync Button with dynamic count */}
+        {onOpenR2Modal && (
+          <button
+            onClick={onOpenR2Modal}
+            className={`flex items-center gap-1 px-2 py-1 text-[11px] font-semibold rounded border transition-all shadow-sm ${
+              isR2Connected
+                ? 'bg-emerald-950/80 hover:bg-emerald-900 border-emerald-600/70 text-emerald-300'
+                : 'bg-amber-950/80 hover:bg-amber-900 border-amber-600/70 text-amber-300 animate-pulse'
+            }`}
+            title="Cloudflare R2 Automated Bhavcopy Synchronization (NSE & BSE Universe)"
+          >
+            <Cloud className={`w-3.5 h-3.5 ${isR2Connected ? 'text-emerald-400' : 'text-amber-400'}`} />
+            <span className="hidden sm:inline">
+              {isR2Connected
+                ? `R2: ${allKnownSymbols.length.toLocaleString()}`
+                : 'Sync R2'}
+            </span>
+            <span className="sm:hidden">
+              {isR2Connected ? `${allKnownSymbols.length}` : 'R2'}
+            </span>
+          </button>
+        )}
+
         {/* Watchlists Button */}
         <button
           onClick={onOpenCategoriesWatchlists}
@@ -310,34 +435,18 @@ export const AmiBrokerHeader: React.FC<AmiBrokerHeaderProps> = ({
           <span>Watchlists</span>
         </button>
 
-        {/* Direct One-Tap ZIP Download Button - Instant Mobile Download */}
-        <button
-          onClick={async () => {
-            try {
-              const res = await fetch('/amibroker-web-project.zip');
-              if (res.ok) {
-                const blob = await res.blob();
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = 'amibroker-web-project.zip';
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-              } else {
-                onOpenUserGuide();
-              }
-            } catch {
-              onOpenUserGuide();
-            }
-          }}
-          className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold text-white bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 rounded border border-cyan-400/50 shadow-sm transition-all cursor-pointer"
-          title="Download Complete Project ZIP directly to your device"
+        {/* Direct One-Tap ZIP Download Link - Instant Browser & Mobile Download */}
+        <a
+          href="/amibroker-web-project.zip"
+          download="amibroker-web-project.zip"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold text-white bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 rounded border border-cyan-400/50 shadow-sm transition-all cursor-pointer no-underline"
+          title="Download Complete Project ZIP (Right-click or tap to save amibroker-web-project.zip)"
         >
           <Download className="w-3.5 h-3.5 text-white animate-pulse" />
           <span>ZIP</span>
-        </button>
+        </a>
 
         {/* User Guide Button - Visible on Mobile and Desktop */}
         <button
@@ -384,20 +493,21 @@ export const AmiBrokerHeader: React.FC<AmiBrokerHeaderProps> = ({
 
               {/* Direct Quick Action: Download Project ZIP & User Manual */}
               <div className="pb-2 space-y-1.5">
-                <button
-                  onClick={() => {
-                    onOpenUserGuide();
-                    setIsMainMenuOpen(false);
-                  }}
-                  className="w-full flex items-center justify-between p-2 rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-xs font-bold transition-all shadow-md cursor-pointer"
+                <a
+                  href="/amibroker-web-project.zip"
+                  download="amibroker-web-project.zip"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => setIsMainMenuOpen(false)}
+                  className="w-full flex items-center justify-between p-2 rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-xs font-bold transition-all shadow-md cursor-pointer no-underline"
                   title="Direct download amibroker-web-project.zip"
                 >
                   <span className="flex items-center gap-2">
                     <Box className="w-4 h-4 text-white" />
-                    <span>Download Project ZIP & Files</span>
+                    <span>Download Project ZIP (Direct)</span>
                   </span>
                   <Download className="w-3.5 h-3.5 text-white" />
-                </button>
+                </a>
 
                 <button
                   onClick={() => {
@@ -412,6 +522,22 @@ export const AmiBrokerHeader: React.FC<AmiBrokerHeaderProps> = ({
                   </span>
                   <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
                 </button>
+
+                {onOpenR2Modal && (
+                  <button
+                    onClick={() => {
+                      onOpenR2Modal();
+                      setIsMainMenuOpen(false);
+                    }}
+                    className="w-full flex items-center justify-between p-2 rounded-lg bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-700/60 text-emerald-300 text-xs font-semibold transition-colors"
+                  >
+                    <span className="flex items-center gap-2">
+                      <Cloud className="w-4 h-4 text-emerald-400" />
+                      <span>Cloudflare R2 Data Sync ({allKnownSymbols.length.toLocaleString()} Symbols)</span>
+                    </span>
+                    <RefreshCw className="w-3.5 h-3.5 text-emerald-400" />
+                  </button>
+                )}
               </div>
 
               {/* Submenu 1: Charts & Workspaces */}

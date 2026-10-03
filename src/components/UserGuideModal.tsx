@@ -46,9 +46,9 @@ export interface ProjectFileEntry {
   description: string;
 }
 
-// Vite raw glob to load all src files dynamically
+// Vite raw glob to load all src files, scripts, and workflows dynamically
 const srcModules = import.meta.glob(
-  ['/src/**/*.{tsx,ts,css}'],
+  ['/src/**/*.{tsx,ts,css}', '/scripts/**/*.{py,js}', '/.github/workflows/*.yml'],
   { query: '?raw', import: 'default', eager: true }
 ) as Record<string, string>;
 
@@ -222,104 +222,6 @@ jobs:
       - run: npm run build
 `,
       description: 'GitHub Actions automated build workflow'
-    },
-    {
-      path: '.github/workflows/daily_nse_bhavcopy_r2.yml',
-      name: 'daily_nse_bhavcopy_r2.yml',
-      folder: '.github/workflows',
-      content: `name: Daily NSE Bhavcopy Ingestion to Cloudflare R2 (Free Tier Optimized)
-
-on:
-  schedule:
-    # Run at 13:30 UTC (19:00 IST) every Monday to Friday (after NSE publishes EOD Bhavcopy & MTO files)
-    - cron: '30 13 * * 1-5'
-  workflow_dispatch: # Allows manual trigger with optional date ranges from GitHub Actions tab
-    inputs:
-      start_date:
-        description: 'Start Date (YYYY-MM-DD) - Leave empty for latest trading day (e.g. 2023-12-01)'
-        required: false
-        default: ''
-      end_date:
-        description: 'End Date (YYYY-MM-DD) - Leave empty for single day (e.g. 2026-09-30)'
-        required: false
-        default: ''
-
-jobs:
-  ingest-and-sync-r2:
-    name: Download Bhavcopy & Sync to R2 (<0.01% Free Tier Quota)
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Install Ingestion Dependencies
-        run: |
-          pip install boto3 requests pandas
-
-      - name: Execute Automated Ingestion & Range Backfill
-        env:
-          R2_ACCOUNT_ID: \${{ secrets.R2_ACCOUNT_ID }}
-          R2_ACCESS_KEY_ID: \${{ secrets.R2_ACCESS_KEY_ID }}
-          R2_SECRET_ACCESS_KEY: \${{ secrets.R2_SECRET_ACCESS_KEY }}
-          R2_BUCKET_NAME: \${{ secrets.R2_BUCKET_NAME }}
-        run: |
-          python scripts/ingest_nse_bhavcopy_r2.py \\
-            --start-date "\${{ github.event.inputs.start_date }}" \\
-            --end-date "\${{ github.event.inputs.end_date }}"
-`,
-      description: 'Daily 7:00 PM IST automated NSE Bhavcopy sync to R2'
-    },
-    {
-      path: 'scripts/ingest_nse_bhavcopy_r2.py',
-      name: 'ingest_nse_bhavcopy_r2.py',
-      folder: 'scripts',
-      content: `#!/usr/bin/env python3
-"""
-Automated NSE Bhavcopy & Deliverable Ingestion Pipeline
-Cloudflare R2 Free-Tier Zero-Bill Architecture
-"""
-import os, sys, io, gzip, json, argparse, requests
-from datetime import datetime, timedelta
-import pandas as pd
-import boto3
-from botocore.config import Config
-
-R2_ACCOUNT_ID = os.getenv("R2_ACCOUNT_ID")
-R2_ACCESS_KEY_ID = os.getenv("R2_ACCESS_KEY_ID")
-R2_SECRET_ACCESS_KEY = os.getenv("R2_SECRET_ACCESS_KEY")
-R2_BUCKET_NAME = os.getenv("R2_BUCKET_NAME")
-
-def get_r2_client():
-    if not all([R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME]):
-        print("[ERROR] Missing Cloudflare R2 credentials in environment!")
-        sys.exit(1)
-    endpoint_url = f"https://{R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
-    return boto3.client(
-        "s3",
-        endpoint_url=endpoint_url,
-        aws_access_key_id=R2_ACCESS_KEY_ID,
-        aws_secret_access_key=R2_SECRET_ACCESS_KEY,
-        config=Config(signature_version="s3v4"),
-        region_name="auto"
-    )
-
-def main():
-    parser = argparse.ArgumentParser(description="NSE Bhavcopy Ingestion Pipeline")
-    parser.add_argument("--start-date", default="", help="Start date (YYYY-MM-DD)")
-    parser.add_argument("--end-date", default="", help="End date (YYYY-MM-DD)")
-    args = parser.parse_args()
-    print("Executing automated NSE Bhavcopy ingestion pipeline...")
-
-if __name__ == "__main__":
-    main()
-`,
-      description: 'NSE Bhavcopy Python ingestion script'
     },
   ];
 
