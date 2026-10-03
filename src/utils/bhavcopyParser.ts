@@ -1,4 +1,4 @@
-import { CandleBar, StockMetadata } from '../types/market';
+import { CandleBar, StockMetadata, MarketCategory } from '../types/market';
 import { resolveCanonicalSymbol } from './corporateActions';
 
 export interface ParsedBhavcopyRow {
@@ -117,26 +117,32 @@ export function parseBhavcopyCsv(csvText: string): {
     return -1;
   };
 
-  const symbolIdx = getCol(['SYMBOL', 'TICKER', 'NAME']);
-  const seriesIdx = getCol(['SERIES', 'SER']);
-  const dateIdx = getCol(['TIMESTAMP', 'DATE1', 'DATE', 'TRADEDATE']);
+  const symbolIdx = getCol(['SC_NAME', 'SCRIP_NAME', 'SYMBOL', 'TICKER', 'NAME', 'SECURITY']);
+  const scripCodeIdx = getCol(['SC_CODE', 'SECURITY_CODE', 'SCRIP_CODE']);
+  const seriesIdx = getCol(['SC_GROUP', 'SERIES', 'SER', 'GROUP']);
+  const dateIdx = getCol(['TDCLOSETD', 'TRADEDATE', 'TIMESTAMP', 'DATE1', 'DATE']);
   const openIdx = getCol(['OPEN', 'OPEN_PRICE', 'OPENPRICE']);
   const highIdx = getCol(['HIGH', 'HIGH_PRICE', 'HIGHPRICE']);
   const lowIdx = getCol(['LOW', 'LOW_PRICE', 'LOWPRICE']);
   const closeIdx = getCol(['CLOSE', 'CLOSE_PRICE', 'CLOSEPRICE', 'LAST']);
-  const volIdx = getCol(['TOTTRDQTY', 'TTL_TRD_QNTY', 'VOLUME', 'VOL', 'TRADED_QTY']);
+  const volIdx = getCol(['NO_OF_SHRS', 'NO_OF_SH', 'TOTTRDQTY', 'TTL_TRD_QNTY', 'VOLUME', 'VOL', 'TRADED_QTY']);
   const delivQtyIdx = getCol(['DELIV_QTY', 'DELIVERY_QTY', 'DELIVQTY', 'DELIVERYQTY']);
   const delivPctIdx = getCol(['DELIV_PER', 'DELIVERY_PER', 'DELIV_PCT', 'DELIV_PERCENTAGE', 'DELIVPCT']);
 
-  if (symbolIdx === -1 || closeIdx === -1) {
+  // If no symbol column but scrip code exists (BSE numbers-only bhavcopy)
+  const effectiveSymbolIdx = symbolIdx !== -1 ? symbolIdx : scripCodeIdx;
+
+  if (effectiveSymbolIdx === -1 || closeIdx === -1) {
     return {
       success: false,
       rowsCount: 0,
       recordsBySymbol: {},
       discoveredMetadata: [],
-      errors: ['Required columns (SYMBOL and CLOSE) not detected in CSV header.'],
+      errors: ['Required columns (SYMBOL/SC_NAME/SC_CODE and CLOSE) not detected in CSV header.'],
     };
   }
+
+  const isBseFile = headerMap['SC_CODE'] !== undefined || headerMap['SC_NAME'] !== undefined || headerMap['TDCLOSETD'] !== undefined;
 
   const recordsBySymbol: Record<string, CandleBar[]> = {};
   const metadataMap = new Map<string, StockMetadata>();
@@ -144,16 +150,23 @@ export function parseBhavcopyCsv(csvText: string): {
   const errors: string[] = [];
 
   // Exclude non-equity debt/bond series (government bonds, treasury bills, mutual funds)
-  const EXCLUDED_SERIES = new Set(['GS', 'GB', 'SG', 'TB', 'MF']);
+  const EXCLUDED_SERIES = new Set(['GS', 'GB', 'SG', 'TB', 'MF', 'GC', 'G-SEC']);
 
   for (let i = 1; i < lines.length; i++) {
     const row = lines[i].split(',').map(v => v.trim().replace(/["']/g, ''));
     if (row.length < 4) continue;
 
-    const rawSymbol = row[symbolIdx]?.toUpperCase();
+    let rawSymbol = row[effectiveSymbolIdx]?.toUpperCase();
+    if (!rawSymbol && scripCodeIdx !== -1) {
+      rawSymbol = row[scripCodeIdx]?.toUpperCase();
+    }
     if (!rawSymbol) continue;
 
-    const series = seriesIdx !== -1 ? (row[seriesIdx]?.toUpperCase() || 'EQ') : 'EQ';
+    // Clean up symbol name (e.g. remove extra trailing whitespace or dots)
+    rawSymbol = rawSymbol.replace(/\s+/g, '_').replace(/[^A-Z0-9_\-&]/g, '');
+    if (!rawSymbol) continue;
+
+    const series = seriesIdx !== -1 ? (row[seriesIdx]?.toUpperCase() || (isBseFile ? 'BSE_EQ' : 'EQ')) : (isBseFile ? 'BSE_EQ' : 'EQ');
     if (EXCLUDED_SERIES.has(series)) {
       continue;
     }
@@ -185,20 +198,21 @@ export function parseBhavcopyCsv(csvText: string): {
       deliveryPct: delivPct !== undefined ? delivPct : (delivQty && volume > 0 ? Math.min(100, Number(((delivQty / volume) * 100).toFixed(2))) : undefined),
     });
 
-    // Auto-discover and generate StockMetadata for ANY symbol from Bhavcopy
+    // Auto-discover and generate StockMetadata for ANY symbol from Bhavcopy (NSE or BSE)
     if (!metadataMap.has(canonicalSymbol)) {
       const isFnO = KNOWN_FNO_SYMBOLS.has(canonicalSymbol);
-      const isSME = series === 'SM' || series === 'ST';
-      const market = isSME ? 'NSE_SME' : isFnO ? 'NSE_FNO' : 'NSE_EQ';
-      const group = isSME ? 'NSE SME Emerge' : isFnO ? 'Nifty 50' : 'NSE All Equity';
+      const isSME = series === 'SM' || series === 'ST' || series === 'M';
+      const market: MarketCategory = isBseFile ? 'BSE' : (isSME ? 'NSE_SME' : isFnO ? 'NSE_FNO' : 'NSE_EQ');
+      const group = isBseFile ? `BSE Group ${series}` : (isSME ? 'NSE SME Emerge' : isFnO ? 'Nifty 50' : 'NSE All Equity');
+      const scCodeStr = scripCodeIdx !== -1 && row[scripCodeIdx] ? ` (${row[scripCodeIdx]})` : '';
 
       metadataMap.set(canonicalSymbol, {
         symbol: canonicalSymbol,
-        name: `${canonicalSymbol} Limited`,
+        name: `${canonicalSymbol}${scCodeStr}`,
         market,
         group,
-        sector: isSME ? 'SME Growth' : 'Equities',
-        industry: isSME ? 'SME Platform' : 'NSE Listed',
+        sector: isBseFile ? 'BSE Listed' : (isSME ? 'SME Growth' : 'Equities'),
+        industry: isBseFile ? `BSE Scrip ${series}` : (isSME ? 'SME Platform' : 'NSE Listed'),
         marketCapCr: Math.round(close * (volume > 10000 ? 50 : 10)),
         isFnO,
         isFavorite: false,
