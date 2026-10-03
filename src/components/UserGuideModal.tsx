@@ -46,9 +46,9 @@ export interface ProjectFileEntry {
   description: string;
 }
 
-// Vite raw glob to load all src files, scripts, and workflows dynamically
+// Vite raw glob to load all src files and scripts dynamically
 const srcModules = import.meta.glob(
-  ['/src/**/*.{tsx,ts,css}', '/scripts/**/*.{py,js}', '/.github/workflows/*.yml'],
+  ['/src/**/*.{tsx,ts,css}', '/scripts/**/*.{py,js}'],
   { query: '?raw', import: 'default', eager: true }
 ) as Record<string, string>;
 
@@ -222,6 +222,110 @@ jobs:
       - run: npm run build
 `,
       description: 'GitHub Actions automated build workflow'
+    },
+    {
+      path: '.github/workflows/daily_nse_bhavcopy_r2.yml',
+      name: 'daily_nse_bhavcopy_r2.yml',
+      folder: '.github/workflows',
+      content: `name: Daily NSE Bhavcopy Ingestion to Cloudflare R2 (Free Tier Optimized)
+
+on:
+  schedule:
+    # Run at 13:30 UTC (19:00 IST) every Monday to Friday (after NSE publishes EOD Bhavcopy & MTO files)
+    - cron: '30 13 * * 1-5'
+  workflow_dispatch: # Allows manual trigger with optional date ranges from GitHub Actions tab
+    inputs:
+      start_date:
+        description: 'Start Date (YYYY-MM-DD) - Leave empty for latest trading day (e.g. 2023-12-01)'
+        required: false
+        default: ''
+      end_date:
+        description: 'End Date (YYYY-MM-DD) - Leave empty for single day (e.g. 2026-09-30)'
+        required: false
+        default: ''
+
+jobs:
+  ingest-and-sync-r2:
+    name: Download Bhavcopy & Sync to R2 (<0.01% Free Tier Quota)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Ingestion Dependencies
+        run: |
+          pip install boto3 requests pandas
+
+      - name: Execute Automated Ingestion & Range Backfill
+        env:
+          R2_ACCOUNT_ID: \${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: \${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: \${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET_NAME: \${{ secrets.R2_BUCKET_NAME }}
+        run: |
+          python scripts/ingest_nse_bhavcopy_r2.py \\
+            --start-date "\${{ github.event.inputs.start_date }}" \\
+            --end-date "\${{ github.event.inputs.end_date }}"
+`,
+      description: 'Daily 7:00 PM IST automated NSE Bhavcopy sync to R2'
+    },
+    {
+      path: '.github/workflows/daily_bse_bhavcopy_r2.yml',
+      name: 'daily_bse_bhavcopy_r2.yml',
+      folder: '.github/workflows',
+      content: `name: Daily BSE Bhavcopy Ingestion to Cloudflare R2 (Free Tier Optimized)
+
+on:
+  schedule:
+    # Run at 14:00 UTC (19:30 IST) every Monday to Friday (after BSE publishes EOD Bhavcopy)
+    - cron: '0 14 * * 1-5'
+  workflow_dispatch: # Allows manual trigger with optional date ranges independently from GitHub Actions tab
+    inputs:
+      start_date:
+        description: 'Start Date (YYYY-MM-DD) - Leave empty for latest trading day (e.g. 2026-01-01)'
+        required: false
+        default: ''
+      end_date:
+        description: 'End Date (YYYY-MM-DD) - Leave empty for single day (e.g. 2026-10-02)'
+        required: false
+        default: ''
+
+jobs:
+  ingest-and-sync-bse:
+    name: Download BSE Bhavcopy & Sync to R2 (3,500+ Symbols)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Ingestion Dependencies
+        run: |
+          pip install boto3 requests pandas
+
+      - name: Execute Automated BSE Ingestion & Range Backfill
+        env:
+          R2_ACCOUNT_ID: \${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: \${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: \${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET_NAME: \${{ secrets.R2_BUCKET_NAME }}
+        run: |
+          python scripts/ingest_bse_bhavcopy_r2.py \\
+            --start-date "\${{ github.event.inputs.start_date }}" \\
+            --end-date "\${{ github.event.inputs.end_date }}"
+`,
+      description: 'Daily 7:30 PM IST automated BSE Bhavcopy sync to R2'
     },
   ];
 
