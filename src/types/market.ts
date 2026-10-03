@@ -231,7 +231,7 @@ export interface AflParamVariable {
   options?: string[];
 }
 
-export type CorporateActionType = 'SPLIT' | 'BONUS' | 'RIGHTS' | 'DEMERGER' | 'SYMBOL_CHANGE';
+export type CorporateActionType = 'SPLIT' | 'BONUS' | 'RIGHTS' | 'DEMERGER' | 'MERGER' | 'SYMBOL_CHANGE';
 
 export interface CorporateAction {
   id: string;
