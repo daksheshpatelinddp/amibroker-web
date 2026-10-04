@@ -463,6 +463,11 @@ export function adjustCandleHistory(
     return candles.map(c => ({ ...c, isAdjusted: false }));
   }
 
+  // If candles are already corporate-adjusted from Parquet dataset, preserve them
+  if (candles.length > 0 && candles[0].isAdjusted) {
+    return candles;
+  }
+
   // Filter actions applicable to this symbol, sorted descending by exDate
   const relevantActions = actions
     .filter(a => a.symbol === symbol && a.actionType !== 'SYMBOL_CHANGE')

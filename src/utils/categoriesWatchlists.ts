@@ -163,3 +163,42 @@ export function parseAbwWatchlistFile(fileContent: string, fileName?: string): {
 
   return { name, symbols };
 }
+
+/**
+ * Automatically sync newly listed symbols (whose first trading day is in current year)
+ * into a dedicated dynamic AmiBroker watchlist.
+ */
+export function syncNewListingsWatchlist(
+  universe: StockMetadata[],
+  currentWatchlists: Watchlist[]
+): Watchlist[] {
+  const currentYear = new Date().getFullYear();
+  const newListings = universe.filter((s) => s.isNewListing);
+  if (newListings.length === 0) return currentWatchlists;
+
+  const wlId = `wl-new-listings-${currentYear}`;
+  const wlName = `New Listings & IPOs (${currentYear})`;
+  const symbols = newListings.map((s) => s.symbol);
+
+  const existingIndex = currentWatchlists.findIndex((w) => w.id === wlId);
+  if (existingIndex >= 0) {
+    const updated = [...currentWatchlists];
+    updated[existingIndex] = {
+      ...updated[existingIndex],
+      symbols,
+      description: `${newListings.length} new symbols traded for the first time in ${currentYear}.parquet`,
+    };
+    return updated;
+  } else {
+    const newWl: Watchlist = {
+      id: wlId,
+      name: wlName,
+      description: `${newListings.length} new symbols traded for the first time in ${currentYear}.parquet`,
+      symbols,
+      isDefault: false,
+      color: '#10b981',
+      createdAt: new Date().toISOString(),
+    };
+    return [newWl, ...currentWatchlists];
+  }
+}
