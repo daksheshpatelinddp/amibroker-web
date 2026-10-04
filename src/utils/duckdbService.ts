@@ -313,31 +313,66 @@ export async function loadContinuousParquetRangeIntoDuckDB(
 
   // Detect schema column names dynamically
   const schemaRes = await conn.query(`DESCRIBE raw_parquet_universe;`);
-  const columns = schemaRes.toArray().map((r: any) => String(r.column_name).toLowerCase());
-  console.log('[DuckDB Schema] Detected parquet columns:', columns);
+  const rawCols = schemaRes.toArray().map((r: any) => String(r.column_name));
+  console.log('[DuckDB Schema] Detected parquet raw columns:', rawCols);
 
-  const symCol = columns.find((c) => ['symbol', 'ticker', 'scrip', 'sc_name'].includes(c)) || 'symbol';
-  const dateCol = columns.find((c) => ['date', 'timestamp', 'datetime', 'time'].includes(c)) || 'date';
-  const openCol = columns.find((c) => ['open', 'open_price', 'opnpric'].includes(c)) || 'open';
-  const highCol = columns.find((c) => ['high', 'high_price', 'hghpric'].includes(c)) || 'high';
-  const lowCol = columns.find((c) => ['low', 'low_price', 'lwpric'].includes(c)) || 'low';
-  const closeCol = columns.find((c) => ['close', 'close_price', 'clspric'].includes(c)) || 'close';
-  const volCol = columns.find((c) => ['volume', 'vol', 'tottrdqty', 'ttl_trd_qnty'].includes(c)) || 'volume';
-  const delivQtyCol = columns.find((c) => ['deliveryqty', 'deliv_qty', 'delivery_qty', 'delivqty'].includes(c));
-  const delivPctCol = columns.find((c) => ['deliverypct', 'deliv_per', 'delivery_pct', 'delivpct'].includes(c));
+  const getColExpr = (candidates: string[], fallback: string) => {
+    const match = rawCols.find((c) => candidates.includes(c.toLowerCase()));
+    return match ? `"${match}"` : `"${fallback}"`;
+  };
 
-  const delivQtySelect = delivQtyCol
-    ? `COALESCE(TRY_CAST(${delivQtyCol} AS BIGINT), CAST(${volCol} * 0.45 AS BIGINT))`
+  const symCol = getColExpr(['symbol', 'ticker', 'scrip', 'sc_name', 'security', 'stock', 'tradingsymbol'], 'symbol');
+  const dateCol = getColExpr(['date', 'timestamp', 'datetime', 'time', 'tradedate', 'trade_date', 'dt', 'timestamp_ms'], 'date');
+  const openCol = getColExpr(['open', 'open_price', 'opnpric', 'openprice'], 'open');
+  const highCol = getColExpr(['high', 'high_price', 'hghpric', 'highprice'], 'high');
+  const lowCol = getColExpr(['low', 'low_price', 'lwpric', 'lowprice'], 'low');
+  const closeCol = getColExpr(['close', 'close_price', 'clspric', 'closeprice', 'adj_close', 'adjclose', 'adjusted_close'], 'close');
+  const volCol = getColExpr(['volume', 'vol', 'tottrdqty', 'ttl_trd_qnty', 'traded_qty', 'total_traded_quantity'], 'volume');
+  const delivQtyMatch = rawCols.find((c) => ['deliveryqty', 'deliv_qty', 'delivery_qty', 'delivqty', 'deliveryquantity'].includes(c.toLowerCase()));
+  const delivPctMatch = rawCols.find((c) => ['deliverypct', 'deliv_per', 'delivery_pct', 'delivpct', 'deliverypercent'].includes(c.toLowerCase()));
+
+  const delivQtySelect = delivQtyMatch
+    ? `COALESCE(TRY_CAST("${delivQtyMatch}" AS BIGINT), CAST(${volCol} * 0.45 AS BIGINT))`
     : `CAST(${volCol} * 0.45 AS BIGINT)`;
-  const delivPctSelect = delivPctCol
-    ? `COALESCE(TRY_CAST(${delivPctCol} AS DOUBLE), 45.0)`
+  const delivPctSelect = delivPctMatch
+    ? `COALESCE(TRY_CAST("${delivPctMatch}" AS DOUBLE), 45.0)`
     : `45.0`;
 
   await conn.query(`
     CREATE OR REPLACE VIEW adjusted_candles AS
     SELECT
-      UPPER(TRIM(CAST(${symCol} AS VARCHAR))) AS symbol,
-      CAST(strftime(TRY_CAST(${dateCol} AS DATE), '%Y-%m-%d') AS VARCHAR) AS date,
+      REGEXP_REPLACE(UPPER(TRIM(CAST(${symCol} AS VARCHAR))), '(\\.NS|\\.BO|-EQ|-BE)$', '') AS symbol,
+      COALESCE(
+        -- 1. ISO date pattern YYYY-MM-DD
+        CASE
+          WHEN CAST(${dateCol} AS VARCHAR) ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
+          THEN SUBSTRING(CAST(${dateCol} AS VARCHAR), 1, 10)
+          ELSE NULL
+        END,
+        -- 2. Standard DATE or TIMESTAMP
+        TRY_CAST(strftime(TRY_CAST(${dateCol} AS DATE), '%Y-%m-%d') AS VARCHAR),
+        TRY_CAST(strftime(TRY_CAST(${dateCol} AS TIMESTAMP), '%Y-%m-%d') AS VARCHAR),
+        -- 3. Integer YYYYMMDD (e.g. 20240101)
+        CASE
+          WHEN TRY_CAST(${dateCol} AS BIGINT) BETWEEN 19800101 AND 20501231
+          THEN SUBSTRING(CAST(${dateCol} AS VARCHAR), 1, 4) || '-' || SUBSTRING(CAST(${dateCol} AS VARCHAR), 5, 2) || '-' || SUBSTRING(CAST(${dateCol} AS VARCHAR), 7, 2)
+          -- 4. Epoch nanoseconds
+          WHEN TRY_CAST(${dateCol} AS BIGINT) > 1000000000000000
+          THEN CAST(strftime(epoch_ms(TRY_CAST(${dateCol} AS BIGINT) / 1000000), '%Y-%m-%d') AS VARCHAR)
+          -- 5. Epoch milliseconds
+          WHEN TRY_CAST(${dateCol} AS BIGINT) > 1000000000000
+          THEN CAST(strftime(epoch_ms(TRY_CAST(${dateCol} AS BIGINT)), '%Y-%m-%d') AS VARCHAR)
+          -- 6. Epoch seconds
+          WHEN TRY_CAST(${dateCol} AS BIGINT) BETWEEN 600000000 AND 2500000000
+          THEN CAST(strftime(to_timestamp(TRY_CAST(${dateCol} AS BIGINT)), '%Y-%m-%d') AS VARCHAR)
+          ELSE NULL
+        END,
+        -- 7. String date formats (DD-MM-YYYY, DD/MM/YYYY, DD-b-YYYY)
+        TRY_CAST(strftime(TRY_STRPTIME(CAST(${dateCol} AS VARCHAR), '%d-%m-%Y'), '%Y-%m-%d') AS VARCHAR),
+        TRY_CAST(strftime(TRY_STRPTIME(CAST(${dateCol} AS VARCHAR), '%d/%m/%Y'), '%Y-%m-%d') AS VARCHAR),
+        TRY_CAST(strftime(TRY_STRPTIME(CAST(${dateCol} AS VARCHAR), '%d-%b-%Y'), '%Y-%m-%d') AS VARCHAR),
+        SUBSTRING(CAST(${dateCol} AS VARCHAR), 1, 10)
+      ) AS date,
       CAST(${openCol} AS DOUBLE) AS open,
       CAST(${highCol} AS DOUBLE) AS high,
       CAST(${lowCol} AS DOUBLE) AS low,
@@ -347,9 +382,14 @@ export async function loadContinuousParquetRangeIntoDuckDB(
       ${delivPctSelect} AS deliveryPct,
       TRUE AS isAdjusted
     FROM raw_parquet_universe
-    WHERE ${closeCol} > 0 AND ${symCol} IS NOT NULL
+    WHERE ${closeCol} > 0 AND ${symCol} IS NOT NULL AND ${dateCol} IS NOT NULL
     QUALIFY ROW_NUMBER() OVER (
-      PARTITION BY UPPER(TRIM(CAST(${symCol} AS VARCHAR))), CAST(strftime(TRY_CAST(${dateCol} AS DATE), '%Y-%m-%d') AS VARCHAR)
+      PARTITION BY REGEXP_REPLACE(UPPER(TRIM(CAST(${symCol} AS VARCHAR))), '(\\.NS|\\.BO|-EQ|-BE)$', ''),
+                   COALESCE(
+                     CASE WHEN CAST(${dateCol} AS VARCHAR) ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}' THEN SUBSTRING(CAST(${dateCol} AS VARCHAR), 1, 10) ELSE NULL END,
+                     TRY_CAST(strftime(TRY_CAST(${dateCol} AS DATE), '%Y-%m-%d') AS VARCHAR),
+                     CAST(${dateCol} AS VARCHAR)
+                   )
       ORDER BY CAST(${volCol} AS BIGINT) DESC
     ) = 1;
   `);
@@ -384,10 +424,15 @@ export async function querySymbolCandlesFromDuckDB(symbol: string): Promise<Cand
   const cleanSym = symbol.trim().toUpperCase();
 
   const startT = performance.now();
+  const safeSym = cleanSym.replace(/'/g, "''");
   const querySql = `
     SELECT date, open, high, low, close, volume, deliveryQty, deliveryPct, isAdjusted
     FROM adjusted_candles
-    WHERE symbol = '${cleanSym.replace(/'/g, "''")}'
+    WHERE symbol = '${safeSym}'
+       OR symbol = '${safeSym}.NS'
+       OR symbol = '${safeSym}.BO'
+       OR symbol = '${safeSym}-EQ'
+       OR REGEXP_REPLACE(symbol, '(\\.NS|\\.BO|-EQ|-BE)$', '') = '${safeSym}'
     ORDER BY date ASC;
   `;
 
@@ -395,7 +440,11 @@ export async function querySymbolCandlesFromDuckDB(symbol: string): Promise<Cand
   const rows = result.toArray();
   const duration = Math.round(performance.now() - startT);
 
-  console.log(`[DuckDB Query] ${cleanSym}: retrieved ${rows.length} candles in ${duration}ms`);
+  console.log(
+    `[DuckDB Query] ${cleanSym}: retrieved ${rows.length} candles in ${duration}ms${
+      rows.length > 0 ? ` (Date range: ${rows[0]?.date} -> ${rows[rows.length - 1]?.date})` : ''
+    }`
+  );
 
   return rows.map((r: any) => ({
     date: String(r.date),
