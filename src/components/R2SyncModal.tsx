@@ -19,6 +19,7 @@ import {
   Lock,
   Search,
   CheckCircle,
+  Sparkles,
 } from 'lucide-react';
 import {
   loadR2EndpointUrl,
@@ -47,6 +48,7 @@ interface R2SyncModalProps {
   isOpen: boolean;
   onClose: () => void;
   availableSymbolsCount: number;
+  activeSymbol?: string;
   onImportData: (marketData: Record<string, CandleBar[]>, stockUniverse?: StockMetadata[]) => void;
   onImportDuckDBSuccess?: (totalSymbols: number, years: number[]) => void;
 }
@@ -55,6 +57,7 @@ export const R2SyncModal: React.FC<R2SyncModalProps> = ({
   isOpen,
   onClose,
   availableSymbolsCount,
+  activeSymbol,
   onImportData,
   onImportDuckDBSuccess,
 }) => {
@@ -123,6 +126,23 @@ export const R2SyncModal: React.FC<R2SyncModalProps> = ({
       setCustomYearInput('');
     } else {
       setDuckdbError(`Please enter a valid starting year between 1990 and ${currentCalendarYear}`);
+    }
+  };
+
+  const handleReloadActiveSymbol = async () => {
+    const sym = (activeSymbol || 'RELIANCE').trim().toUpperCase();
+    try {
+      const bars = await querySymbolCandlesFromDuckDB(sym);
+      if (bars && bars.length > 0) {
+        onImportData({ [sym]: bars });
+        setDuckdbSuccessMsg(
+          `Successfully loaded ${bars.length.toLocaleString()} continuous corporate-adjusted candles for ${sym} (${bars[0].date} to ${bars[bars.length - 1].date}) into the active chart!`
+        );
+      } else {
+        setDuckdbError(`No candles found in DuckDB for ${sym}. Click "Load Parquet History" first.`);
+      }
+    } catch (e: any) {
+      setDuckdbError(e.message || `Error loading candles for ${sym}`);
     }
   };
 
@@ -195,13 +215,26 @@ export const R2SyncModal: React.FC<R2SyncModalProps> = ({
       setDuckdbStatusText('Retrieving distinct stock universe from DuckDB...');
       const universe = await getStockUniverseFromDuckDB();
 
-      // Preload initial batch of symbols into immediate marketData state
-      const initialSymbols = universe.slice(0, 25).map((u) => u.symbol);
+      // Preload active symbol and high-liquidity bellwethers directly so chart updates immediately!
+      const targetActive = (activeSymbol || 'RELIANCE').trim().toUpperCase();
+      const prioritySymbols = Array.from(new Set([
+        targetActive,
+        'RELIANCE',
+        'TCS',
+        'INFY',
+        'HDFCBANK',
+        'ICICIBANK',
+        'TATAMOTORS',
+        'TATASTEEL',
+        'SBIN',
+        ...universe.slice(0, 50).map((u) => u.symbol),
+      ]));
+
       const marketDataBatch: Record<string, CandleBar[]> = {};
-      for (const sym of initialSymbols) {
+      for (const sym of prioritySymbols) {
         try {
           const bars = await querySymbolCandlesFromDuckDB(sym);
-          if (bars.length > 0) marketDataBatch[sym] = bars;
+          if (bars && bars.length > 0) marketDataBatch[sym] = bars;
         } catch (e) {}
       }
 
@@ -511,6 +544,29 @@ export const R2SyncModal: React.FC<R2SyncModalProps> = ({
                   </div>
                 </div>
               </div>
+
+              {/* Quick Chart Ingestion Card if cached files exist */}
+              {cachedParquetList.length > 0 && (
+                <div className="p-3 rounded-lg bg-gradient-to-r from-cyan-950/70 via-slate-900 to-slate-950 border border-cyan-700/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shadow-md">
+                  <div className="text-[11px] text-cyan-200">
+                    <div className="font-bold flex items-center gap-1.5 text-cyan-300">
+                      <Sparkles className="w-3.5 h-3.5 text-yellow-400" />
+                      <span>Cached Parquet History Ready ({cachedParquetList.length} Years)</span>
+                    </div>
+                    <span className="text-slate-400 block text-[10px] pt-0.5">
+                      Active Chart Symbol: <strong className="text-white font-mono">{activeSymbol || 'RELIANCE'}</strong>. Replaces stale single-day Bhavcopy bars with complete multi-year corporate-adjusted candles.
+                    </span>
+                  </div>
+                  <button
+                    onClick={handleReloadActiveSymbol}
+                    disabled={isDuckDBLoading}
+                    className="px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold text-[11px] flex items-center justify-center gap-1.5 shrink-0 shadow transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    <Zap className="w-3.5 h-3.5 text-yellow-300" />
+                    <span>Load {activeSymbol || 'RELIANCE'} into Chart</span>
+                  </button>
+                </div>
+              )}
 
               {/* Progress Bar */}
               {isDuckDBLoading && (
