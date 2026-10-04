@@ -7,6 +7,7 @@ def build_zip():
 
     # 1. Copy individual workflow YAML files into public/ for instant direct download
     workflow_files = [
+        "deploy_render.yml",
         "deploy.yml",
         "daily_nse_bhavcopy_r2.yml",
         "daily_bse_bhavcopy_r2.yml"
