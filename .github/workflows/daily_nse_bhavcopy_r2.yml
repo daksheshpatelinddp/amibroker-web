@@ -7,11 +7,11 @@ on:
   workflow_dispatch: # Allows manual trigger with optional date ranges from GitHub Actions tab
     inputs:
       start_date:
-        description: 'Start Date (YYYY-MM-DD) - Leave empty for latest trading day (e.g. 2023-12-01)'
+        description: 'Start Date (YYYY-MM-DD) - Leave empty for latest trading day, or set e.g. 2026-01-01 for yearly backfill'
         required: false
         default: ''
       end_date:
-        description: 'End Date (YYYY-MM-DD) - Leave empty for single day (e.g. 2026-09-30)'
+        description: 'End Date (YYYY-MM-DD) - Leave empty for single day, or set e.g. 2026-10-03 for range end'
         required: false
         default: ''
 
@@ -31,7 +31,8 @@ jobs:
 
       - name: Install Ingestion Dependencies
         run: |
-          pip install boto3 requests pandas
+          pip install --upgrade pip
+          pip install boto3 requests pandas urllib3
 
       - name: Execute Automated Ingestion & Range Backfill
         env:
@@ -40,6 +41,6 @@ jobs:
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
         run: |
-          python scripts/ingest_nse_bhavcopy_r2.py \
+          python -u scripts/ingest_nse_bhavcopy_r2.py \
             --start-date "${{ github.event.inputs.start_date }}" \
             --end-date "${{ github.event.inputs.end_date }}"

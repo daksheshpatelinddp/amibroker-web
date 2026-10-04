@@ -31,15 +31,16 @@ jobs:
 
       - name: Install Ingestion Dependencies
         run: |
-          pip install boto3 requests pandas
+          pip install --upgrade pip
+          pip install boto3 requests pandas urllib3
 
-      - name: Execute Automated BSE Ingestion & Range Backfill
+      - name: Execute BSE Automated Ingestion & Range Backfill
         env:
           R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
         run: |
-          python scripts/ingest_bse_bhavcopy_r2.py \
+          python -u scripts/ingest_bse_bhavcopy_r2.py \
             --start-date "${{ github.event.inputs.start_date }}" \
             --end-date "${{ github.event.inputs.end_date }}"
