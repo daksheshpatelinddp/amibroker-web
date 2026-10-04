@@ -260,6 +260,9 @@ export interface StockMetadata {
   scripCode?: string;
   latestClose?: number;
   latestDate?: string;
+  startDate?: string; // First day of trading
+  candlesCount?: number;
+  isNewListing?: boolean; // First traded in current calendar year
 }
 
 export interface Watchlist {
