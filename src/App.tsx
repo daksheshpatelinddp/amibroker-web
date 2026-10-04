@@ -8,6 +8,7 @@ import {
   getSavedWatchlists,
   saveFavorites,
   saveWatchlists,
+  syncNewListingsWatchlist,
 } from './utils/categoriesWatchlists';
 import {
   saveMarketDataToStorage,
@@ -18,6 +19,15 @@ import {
   loadR2EndpointUrl,
   syncCloudflareR2Data,
 } from './utils/marketStorage';
+import {
+  loadDuckDBR2Url,
+  loadDuckDBStartYear,
+  loadContinuousParquetRangeIntoDuckDB,
+  getStockUniverseFromDuckDB,
+  querySymbolCandlesFromDuckDB,
+  isDuckDBLoaded,
+  getCurrentCalendarYear,
+} from './utils/duckdbService';
 import { ActiveTab, AmiBrokerHeader } from './components/AmiBrokerHeader';
 import { ChartPane } from './components/ChartPane';
 import { ScannerExploration } from './components/ScannerExploration';
@@ -120,6 +130,44 @@ export default function App() {
           console.warn('[App] R2 background auto-sync:', e);
         }
       }
+
+      // Auto-initialize DuckDB WASM Parquet from Browser Cache / R2 if configured
+      const duckdbUrl = loadDuckDBR2Url();
+      if (duckdbUrl && duckdbUrl.trim()) {
+        try {
+          const startYear = loadDuckDBStartYear();
+          const duckRes = await loadContinuousParquetRangeIntoDuckDB(duckdbUrl, startYear);
+          const duckUniverse = await getStockUniverseFromDuckDB();
+          if (duckUniverse && duckUniverse.length > 0) {
+            setStockUniverse(duckUniverse);
+            saveStockUniverseToStorage(duckUniverse);
+
+            // Automatically detect and group new listings whose first trading day is in current year
+            const newListings = duckUniverse.filter((s) => s.isNewListing);
+            setWatchlists((prevWl) => {
+              const updatedWl = syncNewListingsWatchlist(duckUniverse, prevWl);
+              saveWatchlists(updatedWl);
+              return updatedWl;
+            });
+
+            setR2SyncStatus({
+              isConnected: true,
+              totalSymbols: duckUniverse.length,
+              message: `DuckDB WASM Parquet: ${duckUniverse.length.toLocaleString()} symbols corporate-adjusted (${Math.min(...duckRes.registeredYears)}-${Math.max(...duckRes.registeredYears)})${
+                newListings.length > 0 ? ` · ${newListings.length} New Listings Detected` : ''
+              }`,
+            });
+            try {
+              const activeBars = await querySymbolCandlesFromDuckDB('RELIANCE');
+              if (activeBars.length > 0) {
+                setAllMarketData((prev) => ({ ...prev, RELIANCE: activeBars }));
+              }
+            } catch (e) {}
+          }
+        } catch (e) {
+          console.warn('[App] DuckDB background auto-init:', e);
+        }
+      }
     });
   }, []);
 
@@ -151,8 +199,25 @@ export default function App() {
   }, [allMarketData, corporateActions, isAdjusted]);
 
   // Handlers
-  const handleSelectSymbol = (symbol: string) => {
+  const handleSelectSymbol = async (symbol: string) => {
     const cleanSym = symbol.trim().toUpperCase();
+    setSelectedSymbol(cleanSym);
+
+    // If DuckDB WASM is active, query corporate-adjusted data directly from DuckDB
+    if (isDuckDBLoaded()) {
+      try {
+        const duckBars = await querySymbolCandlesFromDuckDB(cleanSym);
+        if (duckBars && duckBars.length > 0) {
+          setAllMarketData((prev) => {
+            const next = { ...prev, [cleanSym]: duckBars };
+            saveMarketDataToStorage(next);
+            return next;
+          });
+          return;
+        }
+      } catch (e) {}
+    }
+
     if (!allMarketData[cleanSym]) {
       const newBars = generateRealisticNseHistory(cleanSym, 250, 0.02, 0.25);
       setAllMarketData((prev) => {
@@ -180,7 +245,6 @@ export default function App() {
         return updated;
       });
     }
-    setSelectedSymbol(cleanSym);
   };
 
   const handleSelectSymbolForChart = (symbol: string) => {
@@ -449,6 +513,40 @@ export default function App() {
         onClose={() => setIsR2ModalOpen(false)}
         availableSymbolsCount={stockUniverse.length}
         onImportData={handleImportBhavcopy}
+        onImportDuckDBSuccess={async (totalSymbols, years) => {
+          try {
+            const universe = await getStockUniverseFromDuckDB();
+            const newListings = universe.filter((s) => s.isNewListing);
+            setStockUniverse(universe);
+            saveStockUniverseToStorage(universe);
+
+            setWatchlists((prevWl) => {
+              const updatedWl = syncNewListingsWatchlist(universe, prevWl);
+              saveWatchlists(updatedWl);
+              return updatedWl;
+            });
+
+            setR2SyncStatus({
+              isConnected: true,
+              totalSymbols,
+              message: `DuckDB WASM Parquet: ${totalSymbols.toLocaleString()} symbols corporate-adjusted (${Math.min(...years)}-${Math.max(...years)})${
+                newListings.length > 0 ? ` · ${newListings.length} New Listings (${getCurrentCalendarYear()})` : ''
+              }`,
+            });
+          } catch (e) {
+            setR2SyncStatus({
+              isConnected: true,
+              totalSymbols,
+              message: `DuckDB WASM Parquet: ${totalSymbols.toLocaleString()} symbols corporate-adjusted (${Math.min(...years)}-${Math.max(...years)})`,
+            });
+          }
+
+          querySymbolCandlesFromDuckDB(selectedSymbol).then((bars) => {
+            if (bars && bars.length > 0) {
+              setAllMarketData((prev) => ({ ...prev, [selectedSymbol]: bars }));
+            }
+          }).catch(() => {});
+        }}
       />
     </div>
   );
