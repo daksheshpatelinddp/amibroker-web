@@ -1327,55 +1327,67 @@ jobs:
                   <h4 className="font-bold text-cyan-300 text-xs sm:text-sm">Render Step-by-Step Instructions</h4>
                   <ol className="list-decimal list-inside space-y-2 text-slate-300 text-xs ml-1">
                     <li>Sign up or log into <strong className="text-white">render.com</strong> with your GitHub account.</li>
-                    <li>On the Render dashboard, tap the blue <strong className="text-cyan-300">New +</strong> button $\rightarrow$ select <strong className="text-white">Static Site</strong>.</li>
+                    <li>On the Render dashboard, tap the blue <strong className="text-cyan-300">New +</strong> button $\rightarrow$ select <strong className="text-white">Static Site</strong> (or use Blueprint with <code className="text-cyan-300 font-mono">render.yaml</code>).</li>
                     <li>Choose your GitHub repository <code className="text-cyan-300 font-mono">amibroker-web</code>.</li>
-                    <li>Fill in these settings:
+                    <li>Fill in these exact settings:
                       <ul className="list-disc list-inside ml-4 mt-1 text-slate-400 space-y-1">
                         <li>Name: <code className="text-white font-mono bg-slate-900 px-1.5 py-0.5 rounded">amibroker-web</code></li>
-                        <li>Branch: <code className="text-white font-mono bg-slate-900 px-1.5 py-0.5 rounded">main</code></li>
-                        <li>Build Command: <code className="text-emerald-300 font-mono bg-slate-900 px-1.5 py-0.5 rounded">npm run build</code></li>
+                        <li>Branch: <code className="text-amber-300 font-mono bg-slate-900 px-1.5 py-0.5 rounded">main</code> (or <code className="text-amber-300 font-mono bg-slate-900 px-1.5 py-0.5 rounded">master</code> - must match your GitHub default branch!)</li>
+                        <li>Build Command: <code className="text-emerald-300 font-mono bg-slate-900 px-1.5 py-0.5 rounded">npm install --legacy-peer-deps && npm run build</code></li>
                         <li>Publish Directory: <code className="text-emerald-300 font-mono bg-slate-900 px-1.5 py-0.5 rounded">dist</code></li>
+                        <li>Auto-Deploy: <strong className="text-emerald-400">Yes</strong> (under Settings $\rightarrow$ Auto-Deploy)</li>
                       </ul>
                     </li>
-                    <li>Scroll down and tap <strong className="text-white">Create Static Site</strong>.</li>
-                    <li>Your site is live instantly on HTTPS!</li>
+                    <li>Under <strong>Environment Variables</strong>, add:
+                      <ul className="list-disc list-inside ml-4 mt-1 text-slate-400 space-y-0.5">
+                        <li><code className="text-cyan-300 font-mono">NODE_VERSION</code> = <code className="text-white font-mono">20.18.0</code> (or <code className="text-white font-mono">22</code>)</li>
+                        <li><code className="text-cyan-300 font-mono">NODE_OPTIONS</code> = <code className="text-white font-mono">--max-old-space-size=1024</code></li>
+                      </ul>
+                    </li>
+                    <li>Tap <strong className="text-white">Create Static Site</strong>. Render will automatically build and deploy!</li>
                   </ol>
 
                   {/* Render Troubleshooting & Error Fix Guide */}
                   <div className="mt-4 p-3.5 bg-rose-950/60 border border-rose-800/80 rounded-xl space-y-3">
                     <h4 className="font-bold text-rose-300 text-xs sm:text-sm flex items-center gap-2">
                       <AlertTriangle className="w-4 h-4 text-rose-400" />
-                      <span>Troubleshooting: "Deploy failed" on Render (How to Fix)</span>
+                      <span>Why Automatic Deploy was not working & Why Manual Deploy failed on Render:</span>
                     </h4>
 
                     <div className="space-y-2 text-slate-300 text-xs">
                       <div>
-                        <strong className="text-white font-semibold">1. Set Node Version to 22 in Render (Most Common Fix):</strong>
+                        <strong className="text-white font-semibold">1. Automatic Deploy not triggering on Render (Branch Mismatch):</strong>
                         <p className="text-slate-400 mt-0.5">
-                          Vite 8 requires Node.js 20 or 22. By default, Render may use an older Node version (like Node 14 or 18), causing the build to fail in 20 seconds.
+                          When creating a site on Render, it defaults the branch to <code className="text-cyan-300 font-mono">main</code>. If your GitHub repository's default branch is <code className="text-amber-300 font-mono">master</code>, Render will NEVER automatically deploy when you push to GitHub!
                         </p>
-                        <ol className="list-disc list-inside mt-1 ml-2 text-slate-300 space-y-0.5">
-                          <li>In Render, go to your Static Site dashboard.</li>
-                          <li>Tap the <strong className="text-cyan-300">Environment</strong> tab in the menu.</li>
-                          <li>Tap <strong className="text-white">Add Environment Variable</strong>.</li>
-                          <li>Key: <code className="text-emerald-300 font-mono bg-slate-900 px-1 py-0.5 rounded">NODE_VERSION</code></li>
-                          <li>Value: <code className="text-emerald-300 font-mono bg-slate-900 px-1 py-0.5 rounded">22.14.0</code> (or <code className="text-emerald-300 font-mono bg-slate-900 px-1 py-0.5 rounded">22</code>)</li>
-                          <li>Tap <strong className="text-white">Save Changes</strong>.</li>
-                          <li>Tap <strong className="text-cyan-300">Manual Deploy</strong> $\rightarrow$ <strong className="text-white">Deploy latest commit</strong>!</li>
-                        </ol>
-                      </div>
-
-                      <div className="pt-2 border-t border-rose-900/60">
-                        <strong className="text-white font-semibold">2. Check Your GitHub Repository Structure:</strong>
-                        <p className="text-slate-400 mt-0.5">
-                          On GitHub, make sure <code className="text-white font-mono">package.json</code> is located right at the top root of your repository, NOT inside a subfolder (e.g. <code className="text-rose-400 font-mono">amibroker-web-project/package.json</code>) and NOT uploaded as an unextracted <code className="text-rose-400 font-mono">.zip</code> file.
+                        <p className="text-emerald-300 mt-1">
+                          $\rightarrow$ <strong>Fix:</strong> In Render Dashboard $\rightarrow$ go to your site $\rightarrow$ tap <strong>Settings</strong> $\rightarrow$ look for <strong>Branch</strong> $\rightarrow$ change it to match your branch (<code className="text-white font-mono">master</code> or <code className="text-white font-mono">main</code>). Ensure <strong>Auto-Deploy</strong> is set to <strong>Yes</strong>.
                         </p>
                       </div>
 
                       <div className="pt-2 border-t border-rose-900/60">
-                        <strong className="text-white font-semibold">3. View the Exact Error Log:</strong>
+                        <strong className="text-white font-semibold">2. Manual Deploy Error: Missing Dependencies or Node Version:</strong>
                         <p className="text-slate-400 mt-0.5">
-                          On your phone screen, tap <strong className="text-white">"Dismiss"</strong> on the "Debug build issues with AI" popup. Scroll down the log terminal to read the exact error message.
+                          If Render's Build Command was just <code className="text-rose-400 font-mono">npm run build</code>, it failed because npm packages weren't installed first! Or if npm had peer dependency conflicts with Node 20/22.
+                        </p>
+                        <p className="text-emerald-300 mt-1">
+                          $\rightarrow$ <strong>Fix:</strong> Change Build Command in Render Settings to: <code className="text-white font-mono bg-slate-900 px-1.5 py-0.5 rounded">npm install --legacy-peer-deps && npm run build</code>
+                        </p>
+                      </div>
+
+                      <div className="pt-2 border-t border-rose-900/60">
+                        <strong className="text-white font-semibold">3. Manual Deploy Error: Publish Directory MUST be "dist":</strong>
+                        <p className="text-slate-400 mt-0.5">
+                          If the Publish Directory was left as <code className="text-rose-400 font-mono">build</code> or <code className="text-rose-400 font-mono">public</code>, Render failed with <em>"Publish directory not found"</em>. Vite builds into <code className="text-emerald-300 font-mono">dist</code>.
+                        </p>
+                      </div>
+
+                      <div className="pt-2 border-t border-rose-900/60">
+                        <strong className="text-white font-semibold">4. 100% Guaranteed Automatic Deploy via Render Deploy Hook:</strong>
+                        <p className="text-slate-400 mt-0.5">
+                          In Render Dashboard $\rightarrow$ <strong>Settings</strong> $\rightarrow$ scroll to <strong>Deploy Hook</strong> $\rightarrow$ copy your unique Deploy Hook URL.
+                          Then in GitHub $\rightarrow$ <strong>Settings $\rightarrow$ Secrets and variables $\rightarrow$ Actions</strong> $\rightarrow$ add secret <code className="text-cyan-300 font-mono">RENDER_DEPLOY_HOOK_URL</code>.
+                          Now, GitHub Actions workflow <code className="text-cyan-300 font-mono">.github/workflows/deploy_render.yml</code> will automatically ping Render on every single git push!
                         </p>
                       </div>
                     </div>

@@ -82,7 +82,7 @@ export const AmiBrokerHeader: React.FC<AmiBrokerHeaderProps> = ({
 }) => {
   // Search & Market filter state
   const [searchQuery, setSearchQuery] = useState('');
-  const [marketFilter, setMarketFilter] = useState<'ALL' | 'NSE' | 'BSE' | 'FNO'>('ALL');
+  const [marketFilter, setMarketFilter] = useState<'ALL' | 'NSE' | 'BSE' | 'FNO' | 'NEW'>('ALL');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isMainMenuOpen, setIsMainMenuOpen] = useState(false);
   const [expandedSubmenu, setExpandedSubmenu] = useState<string | null>('workspaces');
@@ -130,6 +130,7 @@ export const AmiBrokerHeader: React.FC<AmiBrokerHeaderProps> = ({
       if (marketFilter === 'BSE') return isBse;
       if (marketFilter === 'NSE') return !isBse;
       if (marketFilter === 'FNO') return Boolean(meta?.isFnO);
+      if (marketFilter === 'NEW') return Boolean(meta?.isNewListing);
       return true;
     };
 
@@ -150,7 +151,10 @@ export const AmiBrokerHeader: React.FC<AmiBrokerHeaderProps> = ({
           (meta.name.toUpperCase().includes(q) ||
             meta.sector.toUpperCase().includes(q) ||
             (meta.group && meta.group.toUpperCase().includes(q)) ||
-            (meta.scripCode && meta.scripCode.includes(q)))
+            (meta.scripCode && meta.scripCode.includes(q)) ||
+            (meta.startDate && meta.startDate.includes(q)) ||
+            (q === 'NEW' && meta.isNewListing) ||
+            (q === 'IPO' && meta.isNewListing))
         ) {
           matches.push(sym);
         }
@@ -205,19 +209,32 @@ export const AmiBrokerHeader: React.FC<AmiBrokerHeaderProps> = ({
                 <span className="text-emerald-400 font-normal">Auto-Indexed from R2</span>
               </div>
 
-              {/* Segment filter pills: ALL / NSE / BSE / F&O */}
-              <div className="flex items-center gap-1 px-2 py-1.5 border-b border-slate-800 bg-slate-900/90 sticky top-0 z-10">
-                {(['ALL', 'NSE', 'BSE', 'FNO'] as const).map((seg) => (
+              {/* Segment filter pills: ALL / NSE / BSE / F&O / NEW */}
+              <div className="flex items-center gap-1 px-2 py-1.5 border-b border-slate-800 bg-slate-900/90 sticky top-0 z-10 overflow-x-auto">
+                {(['ALL', 'NSE', 'BSE', 'FNO', 'NEW'] as const).map((seg) => (
                   <button
                     key={seg}
                     onClick={() => setMarketFilter(seg)}
-                    className={`px-2 py-0.5 rounded text-[10px] font-sans font-bold transition-colors ${
+                    className={`px-2 py-0.5 rounded text-[10px] font-sans font-bold transition-colors flex items-center gap-1 shrink-0 ${
                       marketFilter === seg
-                        ? 'bg-cyan-500 text-slate-950 shadow-sm'
+                        ? seg === 'NEW'
+                          ? 'bg-emerald-500 text-slate-950 shadow-sm'
+                          : 'bg-cyan-500 text-slate-950 shadow-sm'
+                        : seg === 'NEW'
+                        ? 'bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-300 border border-emerald-800/60'
                         : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
                     }`}
                   >
-                    {seg === 'FNO' ? 'F&O' : seg}
+                    {seg === 'NEW' ? (
+                      <>
+                        <Sparkles className="w-2.5 h-2.5 text-emerald-300" />
+                        <span>New IPOs</span>
+                      </>
+                    ) : seg === 'FNO' ? (
+                      'F&O'
+                    ) : (
+                      seg
+                    )}
                   </button>
                 ))}
                 {onOpenR2Modal && (
@@ -226,7 +243,7 @@ export const AmiBrokerHeader: React.FC<AmiBrokerHeaderProps> = ({
                       setIsSearchOpen(false);
                       onOpenR2Modal();
                     }}
-                    className="ml-auto text-[10px] text-cyan-400 hover:underline flex items-center gap-0.5 font-sans"
+                    className="ml-auto text-[10px] text-cyan-400 hover:underline flex items-center gap-0.5 font-sans shrink-0"
                   >
                     <RefreshCw className="w-2.5 h-2.5" />
                     <span>Sync R2</span>
@@ -285,17 +302,30 @@ export const AmiBrokerHeader: React.FC<AmiBrokerHeaderProps> = ({
                               F&O
                             </span>
                           )}
+                          {meta?.isNewListing && (
+                            <span className="text-[9px] px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-300 border border-emerald-700/80 font-sans font-bold flex items-center gap-0.5">
+                              <Sparkles className="w-2.5 h-2.5 text-emerald-400" />
+                              <span>NEW IPO</span>
+                            </span>
+                          )}
                           {isCur && <span className="text-[9px] text-emerald-400">● Active</span>}
                         </div>
                         {meta && (
-                          <div className="text-[10px] text-slate-400 truncate max-w-[220px]">
-                            {meta.name}
+                          <div className="text-[10px] text-slate-400 truncate max-w-[240px] flex items-center gap-1.5">
+                            <span>{meta.name}</span>
+                            {meta.startDate && meta.isNewListing && (
+                              <span className="text-emerald-400 font-mono text-[9px]">
+                                • First traded: {meta.startDate}
+                              </span>
+                            )}
                           </div>
                         )}
                       </div>
                       {meta && (
-                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 shrink-0">
-                          {meta.sector || meta.group}
+                        <span className={`text-[9px] px-1.5 py-0.5 rounded shrink-0 ${
+                          meta.isNewListing ? 'bg-emerald-950 text-emerald-300 border border-emerald-800/50' : 'bg-slate-800 text-slate-400'
+                        }`}>
+                          {meta.isNewListing ? `Listed ${meta.startDate || ''}` : meta.sector || meta.group}
                         </span>
                       )}
                     </button>
