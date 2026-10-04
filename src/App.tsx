@@ -15,6 +15,8 @@ import {
   clearMarketDataFromStorage,
   saveStockUniverseToStorage,
   loadStockUniverseFromStorage,
+  loadR2EndpointUrl,
+  syncCloudflareR2Data,
 } from './utils/marketStorage';
 import { ActiveTab, AmiBrokerHeader } from './components/AmiBrokerHeader';
 import { ChartPane } from './components/ChartPane';
@@ -26,6 +28,7 @@ import { BhavcopyDataManager } from './components/BhavcopyDataManager';
 import { CloudArchitectureModal } from './components/CloudArchitectureModal';
 import { SymbolCategoriesWatchlistModal } from './components/SymbolCategoriesWatchlistModal';
 import { UserGuideModal } from './components/UserGuideModal';
+import { R2SyncModal } from './components/R2SyncModal';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('chart');
@@ -34,6 +37,12 @@ export default function App() {
   const [showCloudGuide, setShowCloudGuide] = useState<boolean>(false);
   const [showCategoriesModal, setShowCategoriesModal] = useState<boolean>(false);
   const [showUserGuide, setShowUserGuide] = useState<boolean>(false);
+  const [isR2ModalOpen, setIsR2ModalOpen] = useState<boolean>(false);
+  const [r2SyncStatus, setR2SyncStatus] = useState<{
+    isConnected: boolean;
+    totalSymbols: number;
+    message?: string;
+  }>({ isConnected: false, totalSymbols: 0 });
 
   // Signals for opening indicators modal and changing chart styles from Main Menu
   const [openSettingsSignal, setOpenSettingsSignal] = useState<number>(0);
@@ -51,12 +60,12 @@ export default function App() {
   // In-memory Market Data storage (raw Bhavcopy OHLCV + Delivery)
   const [allMarketData, setAllMarketData] = useState<Record<string, CandleBar[]>>(INITIAL_MARKET_DATA);
 
-  // Restore persistent historical dataset and universe from IndexedDB on startup
+  // Restore persistent historical dataset and universe from IndexedDB, and auto-sync R2 on startup
   useEffect(() => {
     Promise.all([
       loadMarketDataFromStorage(),
       loadStockUniverseFromStorage(),
-    ]).then(([savedData, savedUniverse]) => {
+    ]).then(async ([savedData, savedUniverse]) => {
       let currentUniverse = savedUniverse && savedUniverse.length > 0 ? savedUniverse : STOCK_UNIVERSE;
 
       if (savedData && Object.keys(savedData).length > 0) {
@@ -67,13 +76,14 @@ export default function App() {
         const newEntries: StockMetadata[] = [];
         for (const sym of Object.keys(savedData)) {
           if (!existingSymSet.has(sym)) {
+            const isBse = /^\d+$/.test(sym);
             newEntries.push({
               symbol: sym,
-              name: `${sym} Limited`,
-              market: 'NSE_EQ',
-              group: 'NSE All Equity',
-              sector: 'Equities',
-              industry: 'NSE Listed',
+              name: isBse ? `BSE Scrip ${sym}` : `${sym} Limited`,
+              market: isBse ? 'BSE' : 'NSE_EQ',
+              group: isBse ? 'BSE All Equities' : 'NSE All Equity',
+              sector: isBse ? 'BSE Listed' : 'Equities',
+              industry: isBse ? 'BSE Listed' : 'NSE Listed',
               marketCapCr: 50000,
               isFnO: false,
               isFavorite: false,
@@ -87,6 +97,29 @@ export default function App() {
       }
 
       setStockUniverse(currentUniverse);
+
+      // Auto-connect to Cloudflare R2 if endpoint is configured or saved
+      const r2Url = loadR2EndpointUrl() || (import.meta.env.VITE_R2_PUBLIC_URL as string);
+      if (r2Url && r2Url.trim()) {
+        try {
+          const r2Res = await syncCloudflareR2Data(r2Url);
+          if (r2Res.success) {
+            setR2SyncStatus({
+              isConnected: true,
+              totalSymbols: r2Res.totalSymbols,
+              message: r2Res.message,
+            });
+            if (r2Res.marketData && Object.keys(r2Res.marketData).length > 0) {
+              setAllMarketData((prev) => ({ ...prev, ...r2Res.marketData }));
+            }
+            if (r2Res.stockUniverse && r2Res.stockUniverse.length > 0) {
+              setStockUniverse(r2Res.stockUniverse);
+            }
+          }
+        } catch (e) {
+          console.warn('[App] R2 background auto-sync:', e);
+        }
+      }
     });
   }, []);
 
@@ -292,6 +325,10 @@ export default function App() {
         selectedSymbol={selectedSymbol}
         onSelectSymbol={handleSelectSymbol}
         availableSymbols={availableSymbols}
+        stockUniverse={stockUniverse}
+        isR2Connected={Boolean(loadR2EndpointUrl()) || r2SyncStatus.isConnected}
+        r2SymbolsCount={stockUniverse.length}
+        onOpenR2Modal={() => setIsR2ModalOpen(true)}
         isAdjusted={isAdjusted}
         onToggleAdjusted={() => setIsAdjusted((prev) => !prev)}
         onOpenCloudGuide={() => setShowCloudGuide(true)}
@@ -404,6 +441,14 @@ export default function App() {
         isOpen={showUserGuide}
         onClose={() => setShowUserGuide(false)}
         onNavigateTab={(tab) => setActiveTab(tab as ActiveTab)}
+      />
+
+      {/* Cloudflare R2 Sync & Universe Ingestion Modal */}
+      <R2SyncModal
+        isOpen={isR2ModalOpen}
+        onClose={() => setIsR2ModalOpen(false)}
+        availableSymbolsCount={stockUniverse.length}
+        onImportData={handleImportBhavcopy}
       />
     </div>
   );
