@@ -185,47 +185,64 @@ def parse_bse_bhavcopy(csv_text, target_date):
 
 def get_r2_client():
     """Initializes S3/R2 boto3 client if credentials exist"""
-    account_id = os.environ.get("R2_ACCOUNT_ID")
-    access_key = os.environ.get("R2_ACCESS_KEY_ID")
-    secret_key = os.environ.get("R2_SECRET_ACCESS_KEY")
-    bucket_name = os.environ.get("R2_BUCKET_NAME", "amibroker-nse-history")
+    raw_account_id = os.environ.get("R2_ACCOUNT_ID", "").strip()
+    access_key = os.environ.get("R2_ACCESS_KEY_ID", "").strip()
+    secret_key = os.environ.get("R2_SECRET_ACCESS_KEY", "").strip()
+    bucket_name = os.environ.get("R2_BUCKET_NAME", "amibroker-nse-history").strip()
+
+    # Sanitize account ID: remove http/https/trailing slashes
+    account_id = raw_account_id
+    if "://" in account_id:
+        account_id = account_id.split("://")[-1]
+    if "." in account_id:
+        account_id = account_id.split(".")[0]
+    account_id = account_id.strip("/")
 
     if not all([account_id, access_key, secret_key]):
-        print("[!] Note: R2 credentials not found. Simulation mode active.")
+        print("[!] Note: R2 credentials (R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY) not found. Simulation mode active.")
         return None, bucket_name
 
     endpoint_url = f"https://{account_id}.r2.cloudflarestorage.com"
-    s3_client = boto3.client(
-        "s3",
-        endpoint_url=endpoint_url,
-        aws_access_key_id=access_key,
-        aws_secret_access_key=secret_key,
-        config=Config(signature_version="s3v4"),
-    )
-    return s3_client, bucket_name
+    try:
+        s3_client = boto3.client(
+            "s3",
+            endpoint_url=endpoint_url,
+            aws_access_key_id=access_key,
+            aws_secret_access_key=secret_key,
+            config=Config(signature_version="s3v4", retries={"max_attempts": 3, "mode": "standard"}),
+        )
+        return s3_client, bucket_name
+    except Exception as e:
+        print(f"[!] Failed to initialize boto3 R2 client: {e}")
+        return None, bucket_name
 
 def upload_bundle_to_r2(s3_client, bucket_name, data, key, is_immutable=False):
     """Uploads compressed JSON bundle to Cloudflare R2 with optimized cache headers"""
     if s3_client is None:
         print(f"[SIMULATED] Would upload {key} ({len(data)} symbols) to R2 bucket '{bucket_name}'.")
-        return
+        return False
 
-    json_bytes = json.dumps(data).encode("utf-8")
-    gz_buffer = io.BytesIO()
-    with gzip.GzipFile(fileobj=gz_buffer, mode="wb") as gz_file:
-        gz_file.write(json_bytes)
-    gz_data = gz_buffer.getvalue()
+    try:
+        json_bytes = json.dumps(data).encode("utf-8")
+        gz_buffer = io.BytesIO()
+        with gzip.GzipFile(fileobj=gz_buffer, mode="wb") as gz_file:
+            gz_file.write(json_bytes)
+        gz_data = gz_buffer.getvalue()
 
-    cache_header = "public, max-age=31536000, immutable" if is_immutable else "public, max-age=3600"
-    print(f"[*] Uploading {key} ({len(gz_data)} bytes compressed)...")
-    s3_client.put_object(
-        Bucket=bucket_name,
-        Key=key,
-        Body=gz_data,
-        ContentType="application/gzip",
-        ContentEncoding="gzip",
-        CacheControl=cache_header,
-    )
+        cache_header = "public, max-age=31536000, immutable" if is_immutable else "public, max-age=3600"
+        print(f"[*] Uploading {key} ({len(gz_data)} bytes compressed)...")
+        s3_client.put_object(
+            Bucket=bucket_name,
+            Key=key,
+            Body=gz_data,
+            ContentType="application/gzip",
+            ContentEncoding="gzip",
+            CacheControl=cache_header,
+        )
+        return True
+    except Exception as e:
+        print(f"[!] Error uploading {key} to R2: {e}")
+        return False
 
 def main():
     parser = argparse.ArgumentParser(description="Ingest BSE Bhavcopy to Cloudflare R2")
