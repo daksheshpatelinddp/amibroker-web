@@ -46,9 +46,9 @@ export interface ProjectFileEntry {
   description: string;
 }
 
-// Vite raw glob to load all src files and scripts dynamically
+// Vite raw glob to load all src files, scripts, and workflows dynamically
 const srcModules = import.meta.glob(
-  ['/src/**/*.{tsx,ts,css}', '/scripts/**/*.{py,js}'],
+  ['/src/**/*.{tsx,ts,css}', '/scripts/**/*.{py,js}', '/github-workflows/**/*.{yml,md}'],
   { query: '?raw', import: 'default', eager: true }
 ) as Record<string, string>;
 
@@ -201,27 +201,49 @@ dist-ssr
       path: '.github/workflows/deploy.yml',
       name: 'deploy.yml',
       folder: '.github/workflows',
-      content: `name: Build & Deploy AmiBroker Web
+      content: `name: Deploy AmiBroker Web to GitHub Pages
+
 on:
   push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
+    branches: [ main, master ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
 
 jobs:
-  build:
+  deploy:
+    environment:
+      name: github-pages
+      url: \${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Use Node.js 22
+      - name: Setup Node.js 20
         uses: actions/setup-node@v4
         with:
-          node-version: 22
-          cache: 'npm'
-      - run: npm install
-      - run: npm run build
+          node-version: 20
+      - name: Install Dependencies
+        run: npm install --legacy-peer-deps
+      - name: Build Production Web App
+        run: npm run build
+      - name: Setup GitHub Pages
+        uses: actions/configure-pages@v5
+      - name: Upload GitHub Pages Artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: './dist'
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
 `,
-      description: 'GitHub Actions automated build workflow'
+      description: 'Automated GitHub Pages deployment workflow'
     },
     {
       path: '.github/workflows/daily_nse_bhavcopy_r2.yml',
@@ -847,6 +869,85 @@ jobs:
                     <Download className="w-4 h-4" />
                     <span>{isZipping ? `Generating ZIP (${zipProgress}%)...` : `Download All ${allFiles.length} Files (ZIP)`}</span>
                   </button>
+                </div>
+
+                {/* PROMINENT GITHUB ACTIONS WORKFLOW DOWNLOADS & SETUP GUIDE */}
+                <div className="p-3.5 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 border border-cyan-500/40 rounded-xl shadow-lg space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className="p-1 rounded bg-cyan-500/20 text-cyan-400">
+                        <Github className="w-4 h-4" />
+                      </div>
+                      <span className="font-bold text-white text-xs">
+                        GitHub Actions Workflows (Direct 1-Click Downloads)
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-cyan-300 bg-cyan-950/80 px-2 py-0.5 rounded border border-cyan-700/60 font-mono">
+                      Target: .github/workflows/
+                    </span>
+                  </div>
+
+                  {/* 1-Tap Workflow Download Buttons */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <a
+                      href="/daily_nse_bhavcopy_r2.yml"
+                      download="daily_nse_bhavcopy_r2.yml"
+                      className="flex items-center justify-between p-2 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-cyan-500/60 text-slate-200 transition-all text-[11px] group no-underline"
+                    >
+                      <div className="flex items-center gap-1.5 truncate">
+                        <FileCode className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                        <span className="font-mono font-medium truncate">daily_nse_bhavcopy_r2.yml</span>
+                      </div>
+                      <Download className="w-3.5 h-3.5 text-cyan-400 shrink-0 group-hover:scale-110 transition-transform" />
+                    </a>
+
+                    <a
+                      href="/daily_bse_bhavcopy_r2.yml"
+                      download="daily_bse_bhavcopy_r2.yml"
+                      className="flex items-center justify-between p-2 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-cyan-500/60 text-slate-200 transition-all text-[11px] group no-underline"
+                    >
+                      <div className="flex items-center gap-1.5 truncate">
+                        <FileCode className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                        <span className="font-mono font-medium truncate">daily_bse_bhavcopy_r2.yml</span>
+                      </div>
+                      <Download className="w-3.5 h-3.5 text-amber-400 shrink-0 group-hover:scale-110 transition-transform" />
+                    </a>
+
+                    <a
+                      href="/deploy.yml"
+                      download="deploy.yml"
+                      className="flex items-center justify-between p-2 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-cyan-500/60 text-slate-200 transition-all text-[11px] group no-underline"
+                    >
+                      <div className="flex items-center gap-1.5 truncate">
+                        <FileCode className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                        <span className="font-mono font-medium truncate">deploy.yml (GitHub Pages)</span>
+                      </div>
+                      <Download className="w-3.5 h-3.5 text-emerald-400 shrink-0 group-hover:scale-110 transition-transform" />
+                    </a>
+                  </div>
+
+                  {/* Clarification on folder hiding and R2 files */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px] text-slate-300 pt-1">
+                    <div className="bg-slate-950/80 p-2.5 rounded-lg border border-slate-800 space-y-1">
+                      <div className="font-bold text-amber-300 flex items-center gap-1">
+                        <AlertTriangle className="w-3.5 h-3.5" />
+                        <span>Why was .github folder missing in your ZIP?</span>
+                      </div>
+                      <p className="text-slate-400 leading-normal">
+                        Windows and Mac automatically hide folders starting with a dot (<code className="text-cyan-300">.github</code>). In this ZIP, all workflows are placed in <strong>both</strong> <code className="text-cyan-300">.github/workflows/</code> and visible <code className="text-cyan-300">github-workflows/</code> so they are never hidden!
+                      </p>
+                    </div>
+
+                    <div className="bg-slate-950/80 p-2.5 rounded-lg border border-slate-800 space-y-1">
+                      <div className="font-bold text-cyan-300 flex items-center gap-1">
+                        <Cloud className="w-3.5 h-3.5" />
+                        <span>Is R2 data for 2026 yearly or daily?</span>
+                      </div>
+                      <p className="text-slate-400 leading-normal">
+                        <strong>Both!</strong> <code className="text-cyan-300">eod_latest.json.gz</code> has today's single-day EOD bhavcopy; <code className="text-cyan-300">daily/YYYY-MM-DD.json.gz</code> archives daily snapshots; and <code className="text-cyan-300">history_latest.json.gz</code> stores multi-month/yearly candle series for portfolio backtesting.
+                      </p>
+                    </div>
+                  </div>
                 </div>
 
                 {/* Search & Filter Bar */}

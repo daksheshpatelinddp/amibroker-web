@@ -25,6 +25,7 @@ import {
   ChevronRight,
   Eye,
   Box,
+  FileCode,
   Settings,
   Settings2,
 } from 'lucide-react';
@@ -504,9 +505,41 @@ export const AmiBrokerHeader: React.FC<AmiBrokerHeaderProps> = ({
                 >
                   <span className="flex items-center gap-2">
                     <Box className="w-4 h-4 text-white" />
-                    <span>Download Project ZIP (Direct)</span>
+                    <span>Download Project ZIP (Complete)</span>
                   </span>
                   <Download className="w-3.5 h-3.5 text-white" />
+                </a>
+
+                {/* Direct Workflows ZIP Download */}
+                <a
+                  href="/github-workflows.zip"
+                  download="github-workflows.zip"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => setIsMainMenuOpen(false)}
+                  className="w-full flex items-center justify-between p-2 rounded-lg bg-slate-800/90 hover:bg-slate-800 border border-slate-700 text-cyan-300 text-xs font-semibold transition-colors no-underline"
+                  title="Download only GitHub Actions Workflows (.zip)"
+                >
+                  <span className="flex items-center gap-2">
+                    <FileCode className="w-4 h-4 text-cyan-400" />
+                    <span>Download Workflows Only (.zip)</span>
+                  </span>
+                  <Download className="w-3.5 h-3.5 text-cyan-400" />
+                </a>
+
+                {/* Download Page Hub */}
+                <a
+                  href="/download.html"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => setIsMainMenuOpen(false)}
+                  className="w-full flex items-center justify-between p-2 rounded-lg bg-slate-850 hover:bg-slate-800 border border-slate-700/70 text-slate-300 text-xs font-medium transition-colors no-underline"
+                >
+                  <span className="flex items-center gap-2">
+                    <ExternalLink className="w-4 h-4 text-amber-400" />
+                    <span>Open Download Hub (All Files & YAMLs)</span>
+                  </span>
+                  <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
                 </a>
 
                 <button
