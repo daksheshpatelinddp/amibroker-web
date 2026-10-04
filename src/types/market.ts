@@ -257,6 +257,9 @@ export interface StockMetadata {
   marketCapCr: number;
   isFnO: boolean;
   isFavorite?: boolean;
+  scripCode?: string;
+  latestClose?: number;
+  latestDate?: string;
 }
 
 export interface Watchlist {
