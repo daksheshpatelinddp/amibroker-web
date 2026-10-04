@@ -9,18 +9,21 @@
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
     "build": "vite build",
+    "start": "vite preview --port 10000 --host 0.0.0.0",
     "build:zip": "python3 scripts/build_project_zip.py",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit"
   },
   "dependencies": {
+    "@duckdb/duckdb-wasm": "^1.33.1-dev57.0",
     "@google/genai": "^2.4.0",
     "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^22.14.0",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.1",
+    "apache-arrow": "^21.2.0",
     "autoprefixer": "^10.4.21",
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
