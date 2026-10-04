@@ -1,0 +1,46 @@
+name: Deploy AmiBroker Web to Render.com
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch: # Allows manual trigger to deploy to Render on demand
+
+jobs:
+  deploy-to-render:
+    name: Trigger Automated Deployment on Render
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Verify Build
+        run: |
+          npm install --legacy-peer-deps
+          npm run build
+
+      - name: Trigger Render Deploy Hook
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        run: |
+          if [ -n "$RENDER_DEPLOY_HOOK_URL" ]; then
+            echo "[*] Triggering automated deploy on Render via Deploy Hook..."
+            RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" -X POST "$RENDER_DEPLOY_HOOK_URL")
+            STATUS=$(echo "$RESPONSE" | tr -d '\r' | sed -En 's/^HTTP_STATUS:(.*)$/\1/p')
+            BODY=$(echo "$RESPONSE" | sed -e 's/HTTP_STATUS:.*//g')
+            echo "Render API Response: $BODY"
+            if [ "$STATUS" -ge 200 ] && [ "$STATUS" -lt 300 ]; then
+              echo "[+] Successfully triggered Render deployment! Check status on https://dashboard.render.com"
+            else
+              echo "[!] Render Deploy Hook returned HTTP $STATUS. Please verify your RENDER_DEPLOY_HOOK_URL in GitHub Secrets."
+            fi
+          else
+            echo "[!] Note: RENDER_DEPLOY_HOOK_URL secret not set in GitHub Secrets."
+            echo "    Render natively auto-deploys if connected to your GitHub repository."
+            echo "    To also trigger Render directly from GitHub Actions, add RENDER_DEPLOY_HOOK_URL to GitHub Secrets."
+          fi
