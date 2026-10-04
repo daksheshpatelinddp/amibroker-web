@@ -69,6 +69,7 @@ export default function App() {
 
   // In-memory Market Data storage (raw Bhavcopy OHLCV + Delivery)
   const [allMarketData, setAllMarketData] = useState<Record<string, CandleBar[]>>(INITIAL_MARKET_DATA);
+  const [duckdbReadyCount, setDuckdbReadyCount] = useState<number>(0);
 
   // Restore persistent historical dataset and universe from IndexedDB, and auto-sync R2 on startup
   useEffect(() => {
@@ -158,10 +159,12 @@ export default function App() {
               }`,
             });
             try {
-              const activeBars = await querySymbolCandlesFromDuckDB('RELIANCE');
-              if (activeBars.length > 0) {
-                setAllMarketData((prev) => ({ ...prev, RELIANCE: activeBars }));
+              const activeBars = await querySymbolCandlesFromDuckDB(selectedSymbol);
+              if (activeBars && activeBars.length > 0) {
+                setAllMarketData((prev) => ({ ...prev, [selectedSymbol]: activeBars }));
+                saveMarketDataToStorage({ [selectedSymbol]: activeBars });
               }
+              setDuckdbReadyCount((c) => c + 1);
             } catch (e) {}
           }
         } catch (e) {
@@ -170,6 +173,35 @@ export default function App() {
       }
     });
   }, []);
+
+  // Reactive DuckDB candle loader: ensures the active chart always loads full multi-year Parquet candles
+  useEffect(() => {
+    let isMounted = true;
+    if (!selectedSymbol) return;
+
+    async function syncActiveSymbolFromDuckDB() {
+      if (isDuckDBLoaded()) {
+        try {
+          const duckBars = await querySymbolCandlesFromDuckDB(selectedSymbol);
+          if (isMounted && duckBars && duckBars.length > 0) {
+            console.log(`[App] Synced ${duckBars.length} candles for ${selectedSymbol} from DuckDB WASM`);
+            setAllMarketData((prev) => ({
+              ...prev,
+              [selectedSymbol]: duckBars,
+            }));
+            saveMarketDataToStorage({ [selectedSymbol]: duckBars });
+          }
+        } catch (err) {
+          console.warn(`[App] DuckDB query error for ${selectedSymbol}:`, err);
+        }
+      }
+    }
+
+    syncActiveSymbolFromDuckDB();
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedSymbol, duckdbReadyCount]);
 
   // Corporate Actions Database
   const [corporateActions, setCorporateActions] = useState<CorporateAction[]>(DEFAULT_CORPORATE_ACTIONS);
@@ -263,7 +295,8 @@ export default function App() {
     setAllMarketData((prev) => {
       const merged = { ...prev };
       for (const [sym, bars] of Object.entries(newData)) {
-        if (!merged[sym]) {
+        if (!merged[sym] || bars.length > 5 || bars[0]?.isAdjusted) {
+          // If incoming data is multi-year continuous Parquet history (or corporate-adjusted), replace any stale single-day bhavcopy bars!
           merged[sym] = bars;
         } else {
           // Merge by date
@@ -512,6 +545,7 @@ export default function App() {
         isOpen={isR2ModalOpen}
         onClose={() => setIsR2ModalOpen(false)}
         availableSymbolsCount={stockUniverse.length}
+        activeSymbol={selectedSymbol}
         onImportData={handleImportBhavcopy}
         onImportDuckDBSuccess={async (totalSymbols, years) => {
           try {
@@ -533,6 +567,14 @@ export default function App() {
                 newListings.length > 0 ? ` · ${newListings.length} New Listings (${getCurrentCalendarYear()})` : ''
               }`,
             });
+
+            // Force load candles for the currently active symbol!
+            const activeBars = await querySymbolCandlesFromDuckDB(selectedSymbol);
+            if (activeBars && activeBars.length > 0) {
+              setAllMarketData((prev) => ({ ...prev, [selectedSymbol]: activeBars }));
+              saveMarketDataToStorage({ [selectedSymbol]: activeBars });
+            }
+            setDuckdbReadyCount((c) => c + 1);
           } catch (e) {
             setR2SyncStatus({
               isConnected: true,
@@ -540,12 +582,6 @@ export default function App() {
               message: `DuckDB WASM Parquet: ${totalSymbols.toLocaleString()} symbols corporate-adjusted (${Math.min(...years)}-${Math.max(...years)})`,
             });
           }
-
-          querySymbolCandlesFromDuckDB(selectedSymbol).then((bars) => {
-            if (bars && bars.length > 0) {
-              setAllMarketData((prev) => ({ ...prev, [selectedSymbol]: bars }));
-            }
-          }).catch(() => {});
         }}
       />
     </div>
