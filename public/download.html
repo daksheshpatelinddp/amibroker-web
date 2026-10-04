@@ -3,60 +3,74 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Download AmiBroker Web Complete Project ZIP</title>
+  <title>Download AmiBroker Web Codebase & GitHub Workflows</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
     body { background: #020617; color: #f8fafc; padding: 24px; line-height: 1.5; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
-    .card { background: #0f172a; border: 1px solid #334155; border-radius: 16px; padding: 24px; max-width: 480px; width: 100%; box-shadow: 0 10px 30px rgba(0,0,0,0.5); text-align: center; }
-    h1 { font-size: 22px; color: #38bdf8; margin-bottom: 8px; }
-    p { font-size: 13px; color: #94a3b8; margin-bottom: 24px; }
-    .btn { display: block; width: 100%; background: linear-gradient(135deg, #06b6d4, #2563eb); color: #fff; font-weight: bold; font-size: 17px; padding: 18px; border-radius: 12px; text-decoration: none; margin-bottom: 16px; box-shadow: 0 4px 16px rgba(6,182,212,0.4); }
-    .btn:hover { background: linear-gradient(135deg, #0891b2, #1d4ed8); }
-    .info { font-size: 12px; color: #cbd5e1; background: #1e293b; padding: 12px; border-radius: 8px; text-align: left; }
-    .info ul { padding-left: 20px; margin-top: 6px; }
-    .info li { margin-bottom: 4px; }
+    .card { background: #0f172a; border: 1px solid #334155; border-radius: 16px; padding: 24px; max-width: 540px; width: 100%; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+    h1 { font-size: 22px; color: #38bdf8; margin-bottom: 8px; text-align: center; }
+    p.subtitle { font-size: 13px; color: #94a3b8; margin-bottom: 20px; text-align: center; }
+    .btn-primary { display: block; width: 100%; background: linear-gradient(135deg, #06b6d4, #2563eb); color: #fff; font-weight: bold; font-size: 16px; padding: 16px; border-radius: 12px; text-decoration: none; margin-bottom: 12px; text-align: center; box-shadow: 0 4px 16px rgba(6,182,212,0.3); }
+    .btn-primary:hover { background: linear-gradient(135deg, #0891b2, #1d4ed8); }
+    .btn-secondary { display: block; width: 100%; background: #1e293b; border: 1px solid #475569; color: #38bdf8; font-weight: 600; font-size: 14px; padding: 12px; border-radius: 10px; text-decoration: none; margin-bottom: 16px; text-align: center; }
+    .btn-secondary:hover { background: #334155; }
+    .yaml-list { background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 14px; margin-bottom: 16px; }
+    .yaml-list h3 { font-size: 13px; color: #f1f5f9; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .yaml-item { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #334155; font-size: 13px; }
+    .yaml-item:last-child { border-bottom: none; }
+    .yaml-link { color: #38bdf8; text-decoration: none; background: #0f172a; padding: 4px 10px; border-radius: 6px; border: 1px solid #38bdf8; font-size: 12px; font-weight: 600; }
+    .yaml-link:hover { background: #38bdf8; color: #020617; }
+    .info { font-size: 12px; color: #cbd5e1; background: #1e293b; padding: 14px; border-radius: 10px; border-left: 4px solid #06b6d4; }
+    .info ul { padding-left: 18px; margin-top: 6px; }
+    .info li { margin-bottom: 5px; }
+    .tag { display: inline-block; background: #0369a1; color: #fff; font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: bold; margin-left: 4px; }
   </style>
 </head>
 <body>
   <div class="card">
-    <h1>📦 AmiBroker Web Full Project</h1>
-    <p>Complete updated project with all 60+ NSE symbols, date range backfill, corporate actions, and clean build.</p>
+    <h1>📦 AmiBroker Web Downloads</h1>
+    <p class="subtitle">Complete production project, independent NSE & BSE workflows, and Cloudflare R2 ingestion.</p>
 
-    <a id="dlBtn" href="/amibroker-web-project.zip" download="amibroker-web-project.zip" class="btn">
-      📥 Download Project (ZIP)
+    <!-- Complete Project ZIP -->
+    <a href="/amibroker-web-project.zip" download="amibroker-web-project.zip" class="btn-primary">
+      📥 Download Complete Project (ZIP)
     </a>
 
-    <script>
-      const btn = document.getElementById('dlBtn');
-      btn.addEventListener('click', async (e) => {
-        try {
-          const res = await fetch('/amibroker-web-project.zip');
-          if (res.ok) {
-            e.preventDefault();
-            const blob = await res.blob();
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'amibroker-web-project.zip';
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-          }
-        } catch (err) {
-          // allow regular link fallback
-        }
-      });
-    </script>
+    <!-- Workflows only ZIP -->
+    <a href="/github-workflows.zip" download="github-workflows.zip" class="btn-secondary">
+      ⚡ Download Only GitHub Workflows (.zip)
+    </a>
+
+    <!-- Direct YAML Links -->
+    <div class="yaml-list">
+      <h3>📄 Individual Workflow Files (.yml):</h3>
+      <div class="yaml-item">
+        <span><strong>daily_nse_bhavcopy_r2.yml</strong> <span class="tag">NSE</span></span>
+        <a href="/daily_nse_bhavcopy_r2.yml" download="daily_nse_bhavcopy_r2.yml" class="yaml-link">Download .yml</a>
+      </div>
+      <div class="yaml-item">
+        <span><strong>daily_bse_bhavcopy_r2.yml</strong> <span class="tag">BSE</span></span>
+        <a href="/daily_bse_bhavcopy_r2.yml" download="daily_bse_bhavcopy_r2.yml" class="yaml-link">Download .yml</a>
+      </div>
+      <div class="yaml-item">
+        <span><strong>deploy.yml</strong> <span class="tag">Pages</span></span>
+        <a href="/deploy.yml" download="deploy.yml" class="yaml-link">Download .yml</a>
+      </div>
+    </div>
 
     <div class="info">
-      <strong>✨ What is included:</strong>
+      <strong>💡 Important Setup Instructions:</strong>
       <ul>
-        <li>All 60+ Nifty symbols (Reliance, TCS, Zomato, Suzlon, Bel, etc.)</li>
-        <li>Clean ChartPane.tsx with zero duplicate errors</li>
-        <li>Full corporate actions (splits, bonuses, rights)</li>
-        <li>Preferred date range backfiller</li>
-        <li>IndexedDB offline data persistence</li>
+        <li><strong>Folder Location:</strong> In GitHub, place the 3 workflow YAML files inside <code>.github/workflows/</code> in your repo. (In the ZIP, they are in both <code>.github/workflows/</code> and <code>github-workflows/</code>).</li>
+        <li><strong>R2 File Types:</strong>
+          <ul>
+            <li><code>eod_latest.json.gz</code>: <strong>Daily</strong> latest trading day snapshot.</li>
+            <li><code>daily/YYYY-MM-DD.json.gz</code>: <strong>Daily</strong> immutable date archives.</li>
+            <li><code>history_latest.json.gz</code>: <strong>Yearly / Multi-Day</strong> full candle history for backtesting.</li>
+            <li><code>symbols.json</code>: <strong>Master catalog</strong> covering 3,500+ NSE & BSE stocks.</li>
+          </ul>
+        </li>
+        <li><strong>Automatic Deploy:</strong> Pushing to <code>main</code> or <code>master</code> automatically deploys to GitHub Pages.</li>
       </ul>
     </div>
   </div>
